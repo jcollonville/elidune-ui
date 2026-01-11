@@ -1,40 +1,46 @@
 # Elidune UI
 
-Interface utilisateur React pour le système de gestion de bibliothèque Elidune.
+A modern React-based user interface for the Elidune library management system. This frontend application provides an intuitive and responsive experience for managing library operations, from catalog browsing to administrative tasks.
 
-## 🚀 Fonctionnalités
+## Features
 
-### Pour tous les utilisateurs
-- 📚 **Catalogue** : Recherche et consultation du catalogue de la bibliothèque
-- 📖 **Mes emprunts** : Visualisation des emprunts en cours et historique
-- 🔄 **Prolongations** : Prolongation des emprunts en ligne
-- 🌗 **Thème adaptatif** : Mode sombre/clair automatique selon les préférences système
+### For All Users
 
-### Pour les bibliothécaires (Librarian)
-- 👥 **Gestion des usagers** : Création, modification et suppression de comptes
-- 📊 **Statistiques** : Tableau de bord avec statistiques d'activité
-- 📤 **Prêts** : Enregistrement des emprunts et retours
+- **Catalog**: Search and browse the library catalog with advanced filtering options
+- **My Loans**: View current loans, loan history, and manage renewals
+- **Renewals**: Extend loan periods directly from the interface
+- **Adaptive Theme**: Automatic dark/light mode based on system preferences
 
-### Pour les administrateurs
-- ⚙️ **Paramètres** : Configuration des règles de prêt par type de document
-- 🌐 **Serveurs Z39.50** : Configuration des catalogues distants
+### For Librarians
 
-## 📦 Prérequis
+- **User Management**: Create, modify, and manage user accounts
+- **Statistics Dashboard**: View activity statistics and library metrics
+- **Loan Management**: Record new loans and process returns
 
-- Node.js 18+
-- npm 9+ ou yarn 1.22+
-- Backend Elidune Server (API REST)
+### For Administrators
 
-## 🛠️ Installation
+- **Settings**: Configure loan rules per document type
+- **Z39.50 Servers**: Manage remote catalog connections
+- **System Configuration**: Full access to system parameters
 
-### 1. Cloner le projet
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- Node.js 18 or higher
+- npm 9+ or yarn 1.22+
+- Access to the Elidune backend server (REST API)
+
+## Installation
+
+### 1. Clone the Repository
 
 ```bash
 git clone <repository-url>
 cd elidune-ui
 ```
 
-### 2. Installer les dépendances
+### 2. Install Dependencies
 
 ```bash
 npm install
@@ -42,64 +48,56 @@ npm install
 
 ### 3. Configuration
 
-Créer un fichier `.env` à la racine du projet :
+Create a `.env` file in the project root:
 
 ```env
 VITE_API_URL=http://localhost:8080
 ```
 
-## 🚦 Lancement
+Adjust the API URL to match your backend server configuration.
 
-### Mode développement
+## Getting Started
+
+### Development Mode
+
+To start the development server:
 
 ```bash
 npm run dev
 ```
 
-L'application sera accessible à l'adresse http://localhost:3000
+The application will be available at http://localhost:3000. The development server includes hot module replacement for a smooth development experience.
 
-### Build de production
+### Production Build
+
+To create an optimized production build:
 
 ```bash
 npm run build
 ```
 
-Les fichiers de production seront générés dans le dossier `dist/`.
+The production files will be generated in the `dist/` directory, ready for deployment.
 
-### Prévisualisation de la production
+### Preview Production Build
+
+To preview the production build locally:
 
 ```bash
 npm run preview
 ```
 
-## 🧪 Tests
+This is useful for testing the production build before deployment.
 
-### Lancer les tests unitaires
+## Project Structure
 
-```bash
-npm run test
-```
-
-### Lancer les tests avec couverture
-
-```bash
-npm run test:coverage
-```
-
-### Lancer les tests E2E
-
-```bash
-npm run test:e2e
-```
-
-## 📁 Structure du projet
+The project follows a modular structure for maintainability:
 
 ```
 elidune-ui/
-├── public/                 # Fichiers statiques
+├── public/                 # Static assets
 ├── src/
-│   ├── components/         # Composants React réutilisables
-│   │   └── common/         # Composants UI génériques
+│   ├── components/         # Reusable React components
+│   │   └── common/         # Generic UI components
 │   │       ├── Badge.tsx
 │   │       ├── Button.tsx
 │   │       ├── Card.tsx
@@ -109,127 +107,139 @@ elidune-ui/
 │   │       ├── Pagination.tsx
 │   │       ├── SearchInput.tsx
 │   │       └── Table.tsx
-│   ├── contexts/           # Contextes React
-│   │   ├── AuthContext.tsx # Gestion de l'authentification
-│   │   └── ThemeContext.tsx# Gestion du thème
-│   ├── hooks/              # Hooks personnalisés
-│   ├── pages/              # Pages de l'application
+│   ├── contexts/          # React contexts
+│   │   ├── AuthContext.tsx # Authentication state
+│   │   ├── LanguageContext.tsx # Internationalization
+│   │   └── ThemeContext.tsx # Theme management
+│   ├── hooks/             # Custom React hooks
+│   ├── pages/             # Application pages
 │   │   ├── HomePage.tsx
 │   │   ├── ItemDetailPage.tsx
 │   │   ├── ItemsPage.tsx
 │   │   ├── LoginPage.tsx
 │   │   ├── MyLoansPage.tsx
+│   │   ├── ProfilePage.tsx
 │   │   ├── SettingsPage.tsx
 │   │   ├── StatsPage.tsx
 │   │   ├── UserDetailPage.tsx
 │   │   └── UsersPage.tsx
-│   ├── services/           # Services API
-│   │   └── api.ts
-│   ├── types/              # Types TypeScript
+│   ├── services/          # API services
+│   │   └── api.ts         # Main API client
+│   ├── types/             # TypeScript type definitions
 │   │   └── index.ts
-│   ├── utils/              # Utilitaires
-│   ├── App.tsx             # Composant racine
-│   ├── index.css           # Styles globaux
-│   └── main.tsx            # Point d'entrée
+│   ├── utils/             # Utility functions
+│   ├── locales/           # Translation files
+│   ├── App.tsx            # Root component
+│   ├── index.css          # Global styles
+│   └── main.tsx           # Application entry point
 ├── index.html
 ├── package.json
-├── tailwind.config.js
 ├── tsconfig.json
 └── vite.config.ts
 ```
 
-## 🎨 Personnalisation
+## Customization
 
-### Thème
+### Theme Configuration
 
-Le thème utilise Tailwind CSS avec les modes clair et sombre. Les couleurs principales peuvent être modifiées dans `src/index.css` :
+The application uses Tailwind CSS with support for light and dark modes. You can customize the color scheme in `src/index.css`:
 
 ```css
 :root {
   --color-primary: #6366f1;      /* Indigo */
   --color-primary-dark: #4f46e5;
   --color-accent: #f59e0b;       /* Amber */
-  --color-success: #10b981;      /* Emerald */
+  --color-success: #10b981;       /* Emerald */
   --color-danger: #ef4444;       /* Red */
   --color-warning: #f59e0b;      /* Amber */
 }
 ```
 
-### Mode thème
+### Theme Modes
 
-L'application détecte automatiquement les préférences système, mais l'utilisateur peut forcer un thème via le sélecteur dans la barre latérale :
-- **Clair** : Thème lumineux
-- **Sombre** : Thème sombre
-- **Système** : Suit les préférences du système
+The application automatically detects system preferences, but users can manually select a theme:
 
-## 📱 Responsive Design
+- **Light**: Bright theme for daytime use
+- **Dark**: Dark theme for reduced eye strain
+- **System**: Follows the operating system's theme preference
 
-L'interface est entièrement responsive et s'adapte aux différentes tailles d'écran :
-- **Mobile** (< 640px) : Navigation par menu hamburger, layout en colonnes
-- **Tablette** (640px - 1024px) : Layout adaptatif
-- **Desktop** (> 1024px) : Sidebar fixe, layout multi-colonnes
+## Responsive Design
 
-## 🔐 Authentification
+The interface is fully responsive and adapts to different screen sizes:
 
-L'authentification utilise des tokens JWT stockés dans le localStorage. Les routes sont protégées selon le type de compte :
+- **Mobile** (< 640px): Hamburger menu navigation, single-column layout
+- **Tablet** (640px - 1024px): Adaptive layout with optimized spacing
+- **Desktop** (> 1024px): Fixed sidebar, multi-column layouts
 
-| Type de compte | Accès |
-|---------------|-------|
-| Guest | Lecture seule du catalogue |
-| Reader | Catalogue + Mes emprunts |
-| Librarian | + Gestion usagers + Stats |
-| Administrator | + Paramètres système |
+## Authentication
 
-## 🔧 Scripts disponibles
+Authentication uses JWT tokens stored in localStorage. Routes are protected based on account type:
 
-| Commande | Description |
-|----------|-------------|
-| `npm run dev` | Lance le serveur de développement |
-| `npm run build` | Build de production |
-| `npm run preview` | Prévisualise le build de production |
-| `npm run lint` | Vérifie le code avec ESLint |
-| `npm run lint:fix` | Corrige automatiquement les erreurs ESLint |
-| `npm run type-check` | Vérifie les types TypeScript |
+| Account Type | Access Level |
+|--------------|--------------|
+| Guest | Read-only catalog access |
+| Reader | Catalog + personal loans |
+| Librarian | + User management + Statistics |
+| Administrator | + System settings |
 
-## 🌐 Proxy API
+The application supports two-factor authentication (2FA) with TOTP and email-based verification. Trusted devices can bypass 2FA for 90 days.
 
-En développement, les requêtes vers `/api` sont automatiquement redirigées vers le backend configuré dans `vite.config.ts` :
+## Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Create production build |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint code analysis |
+
+## API Proxy
+
+During development, requests to `/api` are automatically proxied to the backend server configured in `vite.config.ts`:
 
 ```typescript
-proxy: {
-  '/api': {
-    target: 'http://localhost:8080',
-    changeOrigin: true,
+server: {
+  port: 3000,
+  proxy: {
+    '/api': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
   },
 }
 ```
 
-## 📖 Technologies utilisées
+This allows you to work with the frontend and backend on different ports without CORS issues.
 
-- **React 18** - Framework UI
-- **TypeScript** - Typage statique
-- **Vite** - Build tool
-- **Tailwind CSS 4** - Framework CSS
-- **React Router 6** - Routing
-- **TanStack Query** - Gestion des données serveur
-- **Axios** - Client HTTP
-- **Lucide React** - Icônes
+## Technology Stack
 
-## 🐳 Docker
+- **React 19** - UI framework
+- **TypeScript** - Type safety and better developer experience
+- **Vite** - Fast build tool and development server
+- **Tailwind CSS 4** - Utility-first CSS framework
+- **React Router 7** - Client-side routing
+- **TanStack Query** - Server state management
+- **Axios** - HTTP client
+- **Lucide React** - Icon library
+- **i18next** - Internationalization support
 
-### Construction de l'image
+## Docker
+
+### Building the Image
 
 ```bash
 docker build -t elidune-ui .
 ```
 
-### Lancement du conteneur
+### Running the Container
 
 ```bash
 docker run -p 80:80 elidune-ui
 ```
 
-### Avec Docker Compose
+### Docker Compose
+
+For a complete setup with the backend API:
 
 ```yaml
 version: '3.8'
@@ -244,6 +254,17 @@ services:
       - api
 ```
 
-## 📄 Licence
+## Internationalization
 
-Ce projet est sous licence propriétaire. Tous droits réservés.
+The application supports multiple languages. Translation files are located in `src/locales/`:
+
+- English (en)
+- French (fr)
+- German (de)
+- Spanish (es)
+
+The language is automatically detected from browser preferences, but users can manually change it in their profile settings.
+
+## License
+
+This project is proprietary software. All rights reserved.
