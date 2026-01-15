@@ -16,7 +16,29 @@ import {
 } from 'lucide-react';
 import { Card, Button, Badge, Table, Input } from '@/components/common';
 import api from '@/services/api';
-import type { Author } from '@/types';
+import type { Author, MediaType } from '@/types';
+
+// Helper function to get translation key for media type
+function getMediaTypeTranslationKey(mediaType: MediaType): string {
+  const keyMap: Record<MediaType, string> = {
+    'u': 'unknown',
+    'b': 'printedText',
+    'bc': 'comics',
+    'p': 'periodic',
+    'v': 'video',
+    'vt': 'videoTape',
+    'vd': 'videoDvd',
+    'a': 'audio',
+    'am': 'audioMusic',
+    'amt': 'audioMusicTape',
+    'amc': 'audioMusicCd',
+    'an': 'audioNonMusic',
+    'c': 'cdRom',
+    'i': 'images',
+    'm': 'multimedia',
+  };
+  return keyMap[mediaType] || 'unknown';
+}
 
 // Types
 type FileFormat = 'iso2709' | 'marcxml';
@@ -35,7 +57,7 @@ interface ParsedRecord {
   abstract_?: string;
   keywords?: string;
   subject?: string;
-  media_type?: string;
+  media_type?: MediaType;
   raw_fields: Map<string, string[]>;
   status: 'pending' | 'importing' | 'imported' | 'error';
   error?: string;
@@ -166,28 +188,36 @@ function buildRecordFromFields(
   if (keywords.length > 0) record.keywords = keywords.join(', ');
 
   // Media type from leader position 6
+  // Map MARC leader types to server media types
   if (leader && leader.length > 6) {
     const leaderType = leader[6];
     switch (leaderType) {
-      case 'a':
-      case 't':
-        record.media_type = 'book';
+      case 'a': // Text (monographic)
+      case 't': // Text (manuscript)
+        record.media_type = 'b'; // PrintedText
         break;
-      case 'g':
-        record.media_type = 'dvd';
+      case 'g': // Projected medium
+        record.media_type = 'v'; // Video
         break;
-      case 'j':
-      case 'i':
-        record.media_type = 'cd';
+      case 'j': // Musical sound recording
+      case 'i': // Nonmusical sound recording
+        record.media_type = 'a'; // Audio
         break;
-      case 's':
-        record.media_type = 'magazine';
+      case 's': // Serial/Periodical
+        record.media_type = 'p'; // Periodic
+        break;
+      case 'm': // Computer file
+        record.media_type = 'c'; // CdRom
+        break;
+      case 'k': // Two-dimensional nonprojectable graphic
+      case 'r': // Three-dimensional artifact
+        record.media_type = 'i'; // Images
         break;
       default:
-        record.media_type = 'book';
+        record.media_type = 'u'; // Unknown
     }
   } else {
-    record.media_type = 'book';
+    record.media_type = 'u'; // Unknown
   }
 
   return record;
@@ -598,7 +628,12 @@ export default function ImportIsoPage() {
       key: 'type',
       header: t('common.type'),
       render: (record: ParsedRecord) => (
-        <Badge>{record.media_type || 'book'}</Badge>
+        <Badge>
+          {record.media_type 
+            ? t(`items.mediaType.${getMediaTypeTranslationKey(record.media_type)}`)
+            : t('items.mediaType.unknown')
+          }
+        </Badge>
       ),
       className: 'hidden md:table-cell',
     },

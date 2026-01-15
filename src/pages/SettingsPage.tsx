@@ -3,7 +3,29 @@ import { useTranslation } from 'react-i18next';
 import { Save, Plus, Trash2, Server, BookOpen } from 'lucide-react';
 import { Card, CardHeader, Button, Input, Badge } from '@/components/common';
 import api from '@/services/api';
-import type { Settings, LoanSettings, Z3950Server } from '@/types';
+import type { Settings, LoanSettings, Z3950Server, MediaType } from '@/types';
+
+// Helper function to get translation key for media type
+function getMediaTypeTranslationKey(mediaType: MediaType): string {
+  const keyMap: Record<MediaType, string> = {
+    'u': 'unknown',
+    'b': 'printedText',
+    'bc': 'comics',
+    'p': 'periodic',
+    'v': 'video',
+    'vt': 'videoTape',
+    'vd': 'videoDvd',
+    'a': 'audio',
+    'am': 'audioMusic',
+    'amt': 'audioMusicTape',
+    'amc': 'audioMusicCd',
+    'an': 'audioNonMusic',
+    'c': 'cdRom',
+    'i': 'images',
+    'm': 'multimedia',
+  };
+  return keyMap[mediaType] || 'unknown';
+}
 
 export default function SettingsPage() {
   const { t } = useTranslation();
@@ -116,7 +138,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2">
                       <BookOpen className="h-4 w-4 text-gray-400" />
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {setting.media_type}
+                        {t(`items.mediaType.${getMediaTypeTranslationKey(setting.media_type)}`)}
                       </span>
                     </div>
                   </td>

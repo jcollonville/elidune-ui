@@ -6,7 +6,6 @@ import {
   Users,
   BookMarked,
   AlertTriangle,
-  Calendar,
   User,
 } from 'lucide-react';
 import {
@@ -22,8 +21,31 @@ import {
   Bar,
 } from 'recharts';
 import { Card, CardHeader, Badge, Table } from '@/components/common';
+import StatsFilters from '@/components/stats/StatsFilters';
 import api from '@/services/api';
-import type { Stats } from '@/types';
+import type { Stats, AdvancedStatsParams, MediaType } from '@/types';
+
+// Helper function to get translation key for media type
+function getMediaTypeTranslationKey(mediaType: MediaType): string {
+  const keyMap: Record<MediaType, string> = {
+    'u': 'unknown',
+    'b': 'printedText',
+    'bc': 'comics',
+    'p': 'periodic',
+    'v': 'video',
+    'vt': 'videoTape',
+    'vd': 'videoDvd',
+    'a': 'audio',
+    'am': 'audioMusic',
+    'amt': 'audioMusicTape',
+    'amc': 'audioMusicCd',
+    'an': 'audioNonMusic',
+    'c': 'cdRom',
+    'i': 'images',
+    'm': 'multimedia',
+  };
+  return keyMap[mediaType] || 'unknown';
+}
 
 interface LoanTimeData {
   date: string;
@@ -40,7 +62,6 @@ interface UserStatsData {
   overdue_loans: number;
 }
 
-type TimeRange = '7d' | '30d' | '90d' | '365d';
 
 export default function StatsPage() {
   const { t, i18n } = useTranslation();
@@ -49,9 +70,12 @@ export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
+  // Advanced stats state
+  const [isLoadingAdvancedStats, setIsLoadingAdvancedStats] = useState(false);
+  const [statsParams, setStatsParams] = useState<AdvancedStatsParams | null>(null);
+  
   // Timeline state
   const [timelineData, setTimelineData] = useState<LoanTimeData[]>([]);
-  const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(true);
   
   // User stats state
@@ -74,72 +98,51 @@ export default function StatsPage() {
     fetchStats();
   }, []);
 
-  // Fetch timeline data
+  // Fetch advanced stats
   useEffect(() => {
-    const fetchTimeline = async () => {
+    if (!statsParams) {
+      // Use default time range if no params set (30 days)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - 30);
+      
+      // Convert to ISO 8601 format with time
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+      
+      const defaultParams: AdvancedStatsParams = {
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        interval: 'day',
+      };
+      setStatsParams(defaultParams);
+      return;
+    }
+
+    const fetchAdvancedStats = async () => {
+      setIsLoadingAdvancedStats(true);
       setIsLoadingTimeline(true);
       try {
-        const days = parseInt(timeRange);
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(endDate.getDate() - days);
-        
-        const data = await api.getLoansTimeline({
-          start_date: startDate.toISOString().split('T')[0],
-          end_date: endDate.toISOString().split('T')[0],
-        });
-        setTimelineData(data);
+        const response = await api.getLoanStats(statsParams);
+        setTimelineData(response.time_series.map(item => ({
+          date: item.period,
+          loans: item.loans,
+          returns: item.returns,
+        })));
       } catch (error) {
-        console.error('Error fetching timeline:', error);
-        // Generate mock data if API not available
-        setTimelineData(generateMockTimelineData(parseInt(timeRange)));
+        console.error('Error fetching loan stats:', error);
+        setTimelineData([]);
       } finally {
+        setIsLoadingAdvancedStats(false);
         setIsLoadingTimeline(false);
       }
     };
-    fetchTimeline();
-  }, [timeRange]);
 
-  // Fetch user stats
-  useEffect(() => {
-    const fetchUserStats = async () => {
-      setIsLoadingUsers(true);
-      try {
-        const data = await api.getUsersStats({
-          sort_by: userSortBy,
-          limit: 10,
-        });
-        setUserStats(data);
-      } catch (error) {
-        console.error('Error fetching user stats:', error);
-        // Generate mock data if API not available
-        setUserStats(generateMockUserStats());
-      } finally {
-        setIsLoadingUsers(false);
-      }
-    };
-    fetchUserStats();
-  }, [userSortBy]);
-
-  // Generate mock timeline data for demo
-  function generateMockTimelineData(days: number): LoanTimeData[] {
-    const data: LoanTimeData[] = [];
-    const today = new Date();
-    
-    for (let i = days; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      data.push({
-        date: date.toISOString().split('T')[0],
-        loans: Math.floor(Math.random() * 15) + 2,
-        returns: Math.floor(Math.random() * 12) + 1,
-      });
-    }
-    return data;
-  }
+    fetchAdvancedStats();
+  }, [statsParams]);
 
   // Generate mock user stats for demo
-  function generateMockUserStats(): UserStatsData[] {
+  const generateMockUserStats = (sortBy: typeof userSortBy): UserStatsData[] => {
     const names = [
       { firstname: 'Marie', lastname: 'Dupont' },
       { firstname: 'Jean', lastname: 'Martin' },
@@ -157,20 +160,48 @@ export default function StatsPage() {
       total_loans: Math.floor(Math.random() * 50) + 5,
       active_loans: Math.floor(Math.random() * 5),
       overdue_loans: Math.floor(Math.random() * 3),
-    })).sort((a, b) => b[userSortBy] - a[userSortBy]);
-  }
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(i18n.language, { day: '2-digit', month: 'short' });
+    })).sort((a, b) => b[sortBy] - a[sortBy]);
   };
 
-  const timeRangeOptions: { value: TimeRange; label: string }[] = [
-    { value: '7d', label: t('stats.timeRange.7d') },
-    { value: '30d', label: t('stats.timeRange.30d') },
-    { value: '90d', label: t('stats.timeRange.90d') },
-    { value: '365d', label: t('stats.timeRange.365d') },
-  ];
+  // Fetch user stats (using mock data since /stats/users endpoint doesn't exist)
+  useEffect(() => {
+    setIsLoadingUsers(true);
+    // Simulate API call delay
+    const timer = setTimeout(() => {
+      setUserStats(generateMockUserStats(userSortBy));
+      setIsLoadingUsers(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [userSortBy]);
+
+  const formatDate = (dateStr: string) => {
+    const interval = statsParams?.interval || 'day';
+    
+    // Handle ISO week format (YYYY-Www)
+    if (interval === 'week' && /^\d{4}-W\d{2}$/.test(dateStr)) {
+      const [year, week] = dateStr.split('-W');
+      return t('stats.weekFormat', { year, week });
+    }
+    
+    // Try to parse as date
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      // If not a valid date, return as is
+      return dateStr;
+    }
+    
+    switch (interval) {
+      case 'year':
+        return date.toLocaleDateString(i18n.language, { year: 'numeric' });
+      case 'month':
+        return date.toLocaleDateString(i18n.language, { month: 'short', year: 'numeric' });
+      case 'week':
+        return date.toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' });
+      case 'day':
+      default:
+        return date.toLocaleDateString(i18n.language, { day: '2-digit', month: 'short' });
+    }
+  };
 
   const userColumns = [
     {
@@ -270,30 +301,29 @@ export default function StatsPage() {
         />
       </div>
 
+      {/* Advanced Stats Filters */}
+      <Card>
+        <StatsFilters
+          onFiltersChange={setStatsParams}
+          isLoading={isLoadingAdvancedStats}
+        />
+      </Card>
+
       {/* Timeline chart */}
       <Card>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <CardHeader
             title={t('stats.loansEvolution')}
-            subtitle={t('stats.loansPerDay')}
+            subtitle={statsParams?.media_type 
+              ? t('stats.loansByType', { 
+                  type: t(`items.mediaType.${getMediaTypeTranslationKey(statsParams.media_type)}`)
+                })
+              : t('stats.loansPerDay')
+            }
           />
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
-            >
-              {timeRangeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
 
-        {isLoadingTimeline ? (
+        {(isLoadingTimeline || isLoadingAdvancedStats) ? (
           <div className="flex items-center justify-center h-64">
             <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           </div>
@@ -325,11 +355,28 @@ export default function StatsPage() {
                     borderColor: 'var(--tooltip-border, #e5e7eb)',
                     borderRadius: '0.5rem',
                   }}
-                  labelFormatter={(label) => new Date(label).toLocaleDateString(i18n.language, {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                  })}
+                  labelFormatter={(label) => {
+                    const interval = statsParams?.interval || 'day';
+                    
+                    // Handle ISO week format (YYYY-Www)
+                    if (interval === 'week' && /^\d{4}-W\d{2}$/.test(label)) {
+                      const [year, week] = label.split('-W');
+                      return t('stats.weekFormat', { year, week });
+                    }
+                    
+                    // Try to parse as date
+                    const date = new Date(label);
+                    if (isNaN(date.getTime())) {
+                      return label;
+                    }
+                    
+                    return date.toLocaleDateString(i18n.language, {
+                      weekday: interval === 'day' ? 'long' : undefined,
+                      day: 'numeric',
+                      month: 'long',
+                      year: interval === 'year' ? 'numeric' : undefined,
+                    });
+                  }}
                 />
                 <Legend />
                 <Area

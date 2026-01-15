@@ -129,7 +129,7 @@ export default function HomePage() {
                     {loan.item.title}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {t('loans.dueDate')}: {new Date(loan.issue_date * 1000).toLocaleDateString()}
+                    {t('loans.dueDate')}: {new Date(loan.issue_date).toLocaleDateString()}
                   </p>
                 </div>
                 {loan.is_overdue && (

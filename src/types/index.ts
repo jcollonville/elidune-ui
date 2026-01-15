@@ -104,10 +104,33 @@ export interface VerifyRecoveryRequest {
   code: string;
 }
 
+// Media type enum matching server definition
+export type MediaType =
+  | 'u'  // Unknown
+  | 'b'  // PrintedText
+  | 'bc' // Comics
+  | 'p'  // Periodic
+  | 'v'  // Video
+  | 'vt' // VideoTape
+  | 'vd' // VideoDvd
+  | 'a'  // Audio
+  | 'am' // AudioMusic
+  | 'amt' // AudioMusicTape
+  | 'amc' // AudioMusicCd
+  | 'an' // AudioNonMusic
+  | 'c'  // CdRom
+  | 'i'  // Images
+  | 'm'; // Multimedia
+
+export interface MediaTypeOption {
+  value: MediaType | '';
+  label: string;
+}
+
 // Item types
 export interface Item {
   id: number;
-  media_type?: string;
+  media_type?: MediaType;
   identification?: string;
   title1?: string;
   title2?: string;
@@ -129,7 +152,7 @@ export interface Item {
 
 export interface ItemShort {
   id: number;
-  media_type?: string;
+  media_type?: MediaType;
   identification?: string;
   title?: string;
   date?: string;
@@ -177,9 +200,9 @@ export interface Specimen {
 // Loan types
 export interface Loan {
   id: number;
-  start_date: number;
-  issue_date: number;
-  renewal_date?: number;
+  start_date: string;
+  issue_date: string;
+  renewal_date?: string;
   nb_renews: number;
   item: ItemShort;
   user?: UserShort;
@@ -228,6 +251,30 @@ export interface UserLoanStats {
   overdue_loans: number;
 }
 
+// Advanced stats types
+export type StatsInterval = 'day' | 'week' | 'month' | 'year';
+
+export interface AdvancedStatsParams {
+  start_date: string;
+  end_date: string;
+  interval?: StatsInterval;
+  media_type?: MediaType;
+  user_id?: number;
+}
+
+export interface LoanStatsTimeSeries {
+  period: string;
+  loans: number;
+  returns: number;
+}
+
+export interface LoanStatsResponse {
+  total_loans: number;
+  total_returns: number;
+  time_series: LoanStatsTimeSeries[];
+  by_media_type: StatEntry[];
+}
+
 // Paginated response
 export interface PaginatedResponse<T> {
   items: T[];
@@ -245,7 +292,7 @@ export interface ApiError {
 
 // Settings
 export interface LoanSettings {
-  media_type: string;
+  media_type: MediaType;
   max_loans: number;
   max_renewals: number;
   duration_days: number;

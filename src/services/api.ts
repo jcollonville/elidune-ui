@@ -16,7 +16,10 @@ import type {
   Setup2FAResponse,
   Verify2FARequest,
   Verify2FAResponse,
-  VerifyRecoveryRequest
+  VerifyRecoveryRequest,
+  AdvancedStatsParams,
+  LoanStatsResponse,
+  MediaType
 } from '@/types';
 
 const API_BASE_URL = '/api/v1';
@@ -149,7 +152,7 @@ class ApiService {
     title?: string;
     author?: string;
     identification?: string;
-    media_type?: string;
+    media_type?: MediaType;
     freesearch?: string;
     page?: number;
     per_page?: number;
@@ -218,7 +221,7 @@ class ApiService {
     specimen_id?: number;
     specimen_identification?: string;
     force?: boolean;
-  }): Promise<{ id: number; issue_date: number; message: string }> {
+  }): Promise<{ id: number; issue_date: string; message: string }> {
     const response = await this.client.post('/loans', data);
     return response.data;
   }
@@ -228,7 +231,7 @@ class ApiService {
     return response.data;
   }
 
-  async renewLoan(loanId: number): Promise<{ id: number; issue_date: number; message: string }> {
+  async renewLoan(loanId: number): Promise<{ id: number; issue_date: string; message: string }> {
     const response = await this.client.post(`/loans/${loanId}/renew`);
     return response.data;
   }
@@ -239,20 +242,8 @@ class ApiService {
     return response.data;
   }
 
-  async getLoansTimeline(params?: {
-    start_date?: string;
-    end_date?: string;
-    user_id?: number;
-  }): Promise<{ date: string; loans: number; returns: number }[]> {
-    const response = await this.client.get('/stats/loans/timeline', { params });
-    return response.data;
-  }
-
-  async getUsersStats(params?: {
-    sort_by?: 'total_loans' | 'active_loans' | 'overdue_loans';
-    limit?: number;
-  }): Promise<{ user_id: number; firstname: string; lastname: string; total_loans: number; active_loans: number; overdue_loans: number }[]> {
-    const response = await this.client.get('/stats/users', { params });
+  async getLoanStats(params: AdvancedStatsParams): Promise<LoanStatsResponse> {
+    const response = await this.client.get<LoanStatsResponse>('/stats/loans', { params });
     return response.data;
   }
 

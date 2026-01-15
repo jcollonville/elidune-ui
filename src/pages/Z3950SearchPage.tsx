@@ -15,7 +15,29 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, Button, Badge, Table, Modal, Input } from '@/components/common';
 import api from '@/services/api';
-import type { ItemShort, Author, Z3950Server } from '@/types';
+import type { ItemShort, Author, Z3950Server, MediaType } from '@/types';
+
+// Helper function to get translation key for media type
+function getMediaTypeTranslationKey(mediaType: MediaType): string {
+  const keyMap: Record<MediaType, string> = {
+    'u': 'unknown',
+    'b': 'printedText',
+    'bc': 'comics',
+    'p': 'periodic',
+    'v': 'video',
+    'vt': 'videoTape',
+    'vd': 'videoDvd',
+    'a': 'audio',
+    'am': 'audioMusic',
+    'amt': 'audioMusicTape',
+    'amc': 'audioMusicCd',
+    'an': 'audioNonMusic',
+    'c': 'cdRom',
+    'i': 'images',
+    'm': 'multimedia',
+  };
+  return keyMap[mediaType] || 'unknown';
+}
 
 interface Z3950Result extends ItemShort {
   remote_id?: number;
@@ -230,7 +252,12 @@ export default function Z3950SearchPage() {
       key: 'media_type',
       header: t('common.type'),
       render: (item: Z3950Result) => (
-        <Badge>{item.media_type || t('items.document')}</Badge>
+        <Badge>
+          {item.media_type 
+            ? t(`items.mediaType.${getMediaTypeTranslationKey(item.media_type)}`)
+            : t('items.document')
+          }
+        </Badge>
       ),
       className: 'hidden lg:table-cell',
     },

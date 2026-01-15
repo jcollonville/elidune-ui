@@ -121,14 +121,14 @@ export default function UserDetailPage() {
       key: 'date',
       header: 'Date emprunt',
       render: (loan: Loan) =>
-        new Date(loan.start_date * 1000).toLocaleDateString('fr-FR'),
+        new Date(loan.start_date).toLocaleDateString('fr-FR'),
     },
     {
       key: 'issue_date',
       header: 'Échéance',
       render: (loan: Loan) => (
         <div className="flex items-center gap-2">
-          <span>{new Date(loan.issue_date * 1000).toLocaleDateString('fr-FR')}</span>
+          <span>{new Date(loan.issue_date).toLocaleDateString('fr-FR')}</span>
           {loan.is_overdue && <Badge variant="danger">Retard</Badge>}
         </div>
       ),

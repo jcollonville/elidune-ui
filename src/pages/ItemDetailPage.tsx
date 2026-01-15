@@ -16,13 +16,37 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, Button, Badge, Modal, Input } from '@/components/common';
 import { useAuth } from '@/contexts/AuthContext';
-import { canManageItems } from '@/types';
+import { canManageItems, type MediaType } from '@/types';
 import api from '@/services/api';
 import type { Item, Specimen, Author } from '@/types';
+import { useTranslation } from 'react-i18next';
+
+// Helper function to get translation key for media type
+function getMediaTypeTranslationKey(mediaType: MediaType): string {
+  const keyMap: Record<MediaType, string> = {
+    'u': 'unknown',
+    'b': 'printedText',
+    'bc': 'comics',
+    'p': 'periodic',
+    'v': 'video',
+    'vt': 'videoTape',
+    'vd': 'videoDvd',
+    'a': 'audio',
+    'am': 'audioMusic',
+    'amt': 'audioMusicTape',
+    'amc': 'audioMusicCd',
+    'an': 'audioNonMusic',
+    'c': 'cdRom',
+    'i': 'images',
+    'm': 'multimedia',
+  };
+  return keyMap[mediaType] || 'unknown';
+}
 
 export default function ItemDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [item, setItem] = useState<Item | null>(null);
@@ -101,7 +125,12 @@ export default function ItemDetailPage() {
               <p className="text-gray-600 dark:text-gray-400">{item.title2}</p>
             )}
             <div className="flex items-center gap-2 mt-2">
-              <Badge>{item.media_type || 'Document'}</Badge>
+              <Badge>
+                {item.media_type 
+                  ? t(`items.mediaType.${getMediaTypeTranslationKey(item.media_type)}`)
+                  : t('items.document')
+                }
+              </Badge>
               {item.is_valid === 0 && <Badge variant="warning">Non validé</Badge>}
             </div>
           </div>

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, BookOpen, Filter, Search } from 'lucide-react';
 import { Card, Button, Table, Badge, Pagination, SearchInput, Modal, Input } from '@/components/common';
 import { useAuth } from '@/contexts/AuthContext';
-import { canManageItems } from '@/types';
+import { canManageItems, type MediaType, type MediaTypeOption } from '@/types';
 import api from '@/services/api';
 import type { ItemShort, Author } from '@/types';
 
@@ -15,12 +15,23 @@ export default function ItemsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const MEDIA_TYPES = [
+  const MEDIA_TYPES: MediaTypeOption[] = [
     { value: '', label: t('items.allTypes') },
-    { value: 'book', label: t('items.book') },
-    { value: 'dvd', label: t('items.dvd') },
-    { value: 'cd', label: t('items.cd') },
-    { value: 'magazine', label: t('items.magazine') },
+    { value: 'u', label: t('items.mediaType.unknown') },
+    { value: 'b', label: t('items.mediaType.printedText') },
+    { value: 'bc', label: t('items.mediaType.comics') },
+    { value: 'p', label: t('items.mediaType.periodic') },
+    { value: 'v', label: t('items.mediaType.video') },
+    { value: 'vt', label: t('items.mediaType.videoTape') },
+    { value: 'vd', label: t('items.mediaType.videoDvd') },
+    { value: 'a', label: t('items.mediaType.audio') },
+    { value: 'am', label: t('items.mediaType.audioMusic') },
+    { value: 'amt', label: t('items.mediaType.audioMusicTape') },
+    { value: 'amc', label: t('items.mediaType.audioMusicCd') },
+    { value: 'an', label: t('items.mediaType.audioNonMusic') },
+    { value: 'c', label: t('items.mediaType.cdRom') },
+    { value: 'i', label: t('items.mediaType.images') },
+    { value: 'm', label: t('items.mediaType.multimedia') },
   ];
 
   const [items, setItems] = useState<ItemShort[]>([]);
@@ -30,7 +41,7 @@ export default function ItemsPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [mediaType, setMediaType] = useState('');
+  const [mediaType, setMediaType] = useState<MediaType | ''>('');
   const [showFilters, setShowFilters] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState({
     title: '',
@@ -163,7 +174,7 @@ export default function ItemsPage() {
             <select
               value={mediaType}
               onChange={(e) => {
-                setMediaType(e.target.value);
+                setMediaType(e.target.value as MediaType | '');
                 setCurrentPage(1);
               }}
               className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
@@ -275,18 +286,34 @@ interface CreateItemFormProps {
 function CreateItemForm({ onSuccess }: CreateItemFormProps) {
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title1: string;
+    identification: string;
+    media_type: MediaType;
+    publication_date: string;
+  }>({
     title1: '',
     identification: '',
-    media_type: 'book',
+    media_type: 'b',
     publication_date: '',
   });
 
-  const MEDIA_TYPES = [
-    { value: 'book', label: t('items.book') },
-    { value: 'dvd', label: t('items.dvd') },
-    { value: 'cd', label: t('items.cd') },
-    { value: 'magazine', label: t('items.magazine') },
+  const MEDIA_TYPES: MediaTypeOption[] = [
+    { value: 'u', label: t('items.mediaType.unknown') },
+    { value: 'b', label: t('items.mediaType.printedText') },
+    { value: 'bc', label: t('items.mediaType.comics') },
+    { value: 'p', label: t('items.mediaType.periodic') },
+    { value: 'v', label: t('items.mediaType.video') },
+    { value: 'vt', label: t('items.mediaType.videoTape') },
+    { value: 'vd', label: t('items.mediaType.videoDvd') },
+    { value: 'a', label: t('items.mediaType.audio') },
+    { value: 'am', label: t('items.mediaType.audioMusic') },
+    { value: 'amt', label: t('items.mediaType.audioMusicTape') },
+    { value: 'amc', label: t('items.mediaType.audioMusicCd') },
+    { value: 'an', label: t('items.mediaType.audioNonMusic') },
+    { value: 'c', label: t('items.mediaType.cdRom') },
+    { value: 'i', label: t('items.mediaType.images') },
+    { value: 'm', label: t('items.mediaType.multimedia') },
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -318,11 +345,11 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
         />
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            {t('items.mediaType')}
+            {t('items.mediaTypeLabel')}
           </label>
           <select
             value={formData.media_type}
-            onChange={(e) => setFormData({ ...formData, media_type: e.target.value })}
+            onChange={(e) => setFormData({ ...formData, media_type: e.target.value as MediaType })}
             className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
           >
             {MEDIA_TYPES.map((type) => (
