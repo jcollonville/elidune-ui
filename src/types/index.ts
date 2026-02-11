@@ -18,6 +18,16 @@ export interface User {
   // Additional fields
   occupation_id?: number;
   birthdate?: string;
+  notes?: string;
+  fee?: string;
+  group_id?: number;
+  public_type?: number;
+  status?: number;
+  // Date fields
+  crea_date?: string;
+  modif_date?: string;
+  archived_date?: string;
+  issue_date?: string;
   // 2FA fields
   two_factor_enabled?: boolean;
   two_factor_method?: string;
@@ -233,6 +243,19 @@ export interface Stats {
 export interface StatEntry {
   label: string;
   value: number;
+  // Available when year param is provided to /stats
+  acquisitions?: number;
+  eliminations?: number;
+}
+
+// Aggregate user stats from /stats/users?mode=aggregate
+export interface UserAggregateStats {
+  new_users_total: number;
+  active_borrowers_total: number;
+  users_total: number;
+  new_users_by_public_type?: StatEntry[];
+  active_borrowers_by_public_type?: StatEntry[];
+  users_by_public_type?: StatEntry[];
 }
 
 // Time-based stats for charts
@@ -251,6 +274,32 @@ export interface UserLoanStats {
   overdue_loans: number;
 }
 
+// Catalog stats from /stats/catalog
+export interface CatalogStatsBreakdown {
+  label?: string;
+  source_id?: number;
+  source_name?: string;
+  active_specimens: number;
+  entered_specimens: number;
+  archived_specimens: number;
+  loans: number;
+  // Hierarchical nesting: source → media_type → public_type
+  by_media_type?: CatalogStatsBreakdown[];
+  by_public_type?: CatalogStatsBreakdown[];
+}
+
+export interface CatalogStats {
+  totals: {
+    active_specimens: number;
+    entered_specimens: number;
+    archived_specimens: number;
+    loans: number;
+  };
+  by_source?: CatalogStatsBreakdown[];
+  by_media_type?: CatalogStatsBreakdown[];
+  by_public_type?: CatalogStatsBreakdown[];
+}
+
 // Advanced stats types
 export type StatsInterval = 'day' | 'week' | 'month' | 'year';
 
@@ -260,6 +309,7 @@ export interface AdvancedStatsParams {
   interval?: StatsInterval;
   media_type?: MediaType;
   user_id?: number;
+  public_type?: number;
 }
 
 export interface LoanStatsTimeSeries {
@@ -310,17 +360,30 @@ export interface Z3950Server {
   port: number;
   database?: string;
   format?: string;
+  login?: string;
+  password?: string;
   is_active: boolean;
+}
+
+// Source type
+export interface Source {
+  id: number;
+  key: string | null;
+  name: string | null;
+  is_archive: number | null;
+  archive_date: string | null;
 }
 
 // Account types for permissions
 export type AccountType = 'Guest' | 'Reader' | 'Librarian' | 'Administrator';
 
 export const isAdmin = (accountType?: string): boolean => 
-  accountType === 'Administrator';
+  accountType?.trim().toLowerCase() === 'admin';
 
-export const isLibrarian = (accountType?: string): boolean => 
-  accountType === 'Administrator' || accountType === 'Librarian';
+export const isLibrarian = (accountType?: string): boolean => {
+  const normalized = accountType?.trim().toLowerCase();
+  return normalized === 'admin' || normalized === 'librarian';
+};
 
 export const canManageItems = (accountType?: string): boolean => 
   isLibrarian(accountType);

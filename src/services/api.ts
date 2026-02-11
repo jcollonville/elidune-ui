@@ -19,7 +19,11 @@ import type {
   VerifyRecoveryRequest,
   AdvancedStatsParams,
   LoanStatsResponse,
-  MediaType
+  MediaType,
+  UserLoanStats,
+  UserAggregateStats,
+  CatalogStats,
+  Source,
 } from '@/types';
 
 const API_BASE_URL = '/api/v1';
@@ -237,13 +241,54 @@ class ApiService {
   }
 
   // Stats
-  async getStats(): Promise<Stats> {
-    const response = await this.client.get<Stats>('/stats');
+  async getStats(params?: {
+    year?: number;
+    media_type?: MediaType;
+    public_type?: number;
+  }): Promise<Stats> {
+    const response = await this.client.get<Stats>('/stats', { params });
     return response.data;
+  }
+
+  // Aggregate user stats (new registrations, active borrowers)
+  async getUserAggregateStats(params: {
+    start_date?: string;
+    end_date?: string;
+  }): Promise<UserAggregateStats> {
+    const response = await this.client.get<UserAggregateStats>('/stats/users', {
+      params: { ...params, mode: 'aggregate' },
+    });
+    return response.data;
+  }
+
+  async getUserLoanStats(params?: {
+    sort_by?: 'total_loans' | 'active_loans' | 'overdue_loans';
+    limit?: number;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<UserLoanStats[]> {
+    const response = await this.client.get('/stats/users', { params });
+    const data = response.data;
+    // Handle both array and object-wrapped responses
+    if (Array.isArray(data)) return data;
+    if (data?.users && Array.isArray(data.users)) return data.users;
+    if (data?.items && Array.isArray(data.items)) return data.items;
+    return [];
   }
 
   async getLoanStats(params: AdvancedStatsParams): Promise<LoanStatsResponse> {
     const response = await this.client.get<LoanStatsResponse>('/stats/loans', { params });
+    return response.data;
+  }
+
+  async getCatalogStats(params?: {
+    start_date?: string;
+    end_date?: string;
+    by_source?: boolean;
+    by_media_type?: boolean;
+    by_public_type?: boolean;
+  }): Promise<CatalogStats> {
+    const response = await this.client.get<CatalogStats>('/stats/catalog', { params });
     return response.data;
   }
 
@@ -255,6 +300,32 @@ class ApiService {
 
   async updateSettings(settings: Partial<Settings>): Promise<Settings> {
     const response = await this.client.put<Settings>('/settings', settings);
+    return response.data;
+  }
+
+  // Sources
+  async getSources(includeArchived = false): Promise<Source[]> {
+    const response = await this.client.get<Source[]>('/sources', {
+      params: { include_archived: includeArchived },
+    });
+    return response.data;
+  }
+
+  async renameSource(id: number, name: string): Promise<Source> {
+    const response = await this.client.put<Source>(`/sources/${id}/rename`, { name });
+    return response.data;
+  }
+
+  async archiveSource(id: number): Promise<Source> {
+    const response = await this.client.post<Source>(`/sources/${id}/archive`);
+    return response.data;
+  }
+
+  async mergeSources(sourceIds: number[], name: string): Promise<Source> {
+    const response = await this.client.post<Source>('/sources/merge', {
+      source_ids: sourceIds,
+      name,
+    });
     return response.data;
   }
 

@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user_id: pending2FA.userId,
       code,
       trust_device: trustDevice,
-      device_id: api.getDeviceId(),
+      device_id: api.getDeviceId() ?? undefined,
     });
     
     // Set user from pending state

@@ -30,7 +30,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               text-gray-900 dark:text-gray-100 
               placeholder-gray-400 dark:placeholder-gray-500
               border-gray-300 dark:border-gray-700
-              focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-indigo-500/40
+              focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:focus:ring-amber-500/40
               disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:text-gray-500
               ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}
               ${className}

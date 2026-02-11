@@ -39,13 +39,18 @@ export default function HomePage() {
   return (
     <div className="space-y-6">
       {/* Welcome section */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 sm:p-8 text-white">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-          {t('nav.home')}, {user?.firstname || user?.username} 👋
-        </h1>
-        <p className="text-indigo-100">
-          {t('auth.loginSubtitle')}
-        </p>
+      <div className="bg-gradient-to-r from-gray-700 to-gray-900 rounded-2xl p-6 sm:p-8 text-white">
+        <div className="flex items-center gap-2">
+          <img src="/elidune_logo.png" alt="Elidune" className="h-30 w-30 mb-2" />
+          <div>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">
+            {t('nav.home')}, {user?.firstname || user?.username} 👋
+          </h1>
+          <p className="text-gray-100">
+            {t('auth.loginSubtitle')}
+          </p>
+          </div>
+        </div>
       </div>
 
       {/* Overdue loans alert */}
@@ -67,7 +72,7 @@ export default function HomePage() {
             icon={BookOpen}
             label={t('stats.documents')}
             value={stats.items.total}
-            color="indigo"
+            color="gray"
           />
           <StatCard
             icon={Users}
@@ -79,7 +84,7 @@ export default function HomePage() {
             icon={BookMarked}
             label={t('stats.activeLoans')}
             value={stats.loans.active}
-            color="blue"
+            color="amber"
           />
           <StatCard
             icon={TrendingUp}
@@ -98,7 +103,7 @@ export default function HomePage() {
           action={
             <Link
               to="/my-loans"
-              className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+              className="text-sm text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
             >
               {t('common.view')} <ArrowRight className="h-4 w-4" />
             </Link>
@@ -107,7 +112,7 @@ export default function HomePage() {
 
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            <div className="h-8 w-8 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : myLoans.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -121,8 +126,8 @@ export default function HomePage() {
                 key={loan.id}
                 className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50"
               >
-                <div className="flex-shrink-0 h-12 w-12 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
-                  <BookOpen className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                <div className="flex-shrink-0 h-12 w-12 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+                  <BookOpen className="h-6 w-6 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-900 dark:text-white truncate">
@@ -174,14 +179,14 @@ interface StatCardProps {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
-  color: 'indigo' | 'emerald' | 'blue' | 'red';
+  color: 'gray' | 'emerald' | 'amber' | 'red';
 }
 
 function StatCard({ icon: Icon, label, value, color }: StatCardProps) {
   const colors = {
-    indigo: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400',
+    gray: 'bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300',
     emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
-    blue: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+    amber: 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
     red: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400',
   };
 
@@ -213,10 +218,10 @@ function QuickActionCard({ to, icon: Icon, title, description }: QuickActionCard
   return (
     <Link
       to={to}
-      className="block p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-lg transition-all group"
+      className="block p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-amber-300 dark:hover:border-amber-700 hover:shadow-lg transition-all group"
     >
       <div className="flex items-center gap-3">
-        <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/50 transition-colors">
+        <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/50 transition-colors">
           <Icon className="h-5 w-5" />
         </div>
         <div>

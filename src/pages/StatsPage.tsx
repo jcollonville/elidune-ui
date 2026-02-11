@@ -7,6 +7,9 @@ import {
   BookMarked,
   AlertTriangle,
   User,
+  Library,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import {
   XAxis,
@@ -17,13 +20,11 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
-  BarChart,
-  Bar,
 } from 'recharts';
-import { Card, CardHeader, Badge, Table } from '@/components/common';
-import StatsFilters from '@/components/stats/StatsFilters';
+import { Card, CardHeader, Badge, Table, Input } from '@/components/common';
 import api from '@/services/api';
-import type { Stats, AdvancedStatsParams, MediaType } from '@/types';
+import type { Stats, AdvancedStatsParams, MediaType, MediaTypeOption, StatsInterval, UserLoanStats, UserAggregateStats, CatalogStats, CatalogStatsBreakdown } from '@/types';
+import { translateStatLabel } from '@/utils/codeLabels';
 
 // Helper function to get translation key for media type
 function getMediaTypeTranslationKey(mediaType: MediaType): string {
@@ -53,14 +54,7 @@ interface LoanTimeData {
   returns: number;
 }
 
-interface UserStatsData {
-  user_id: number;
-  firstname: string;
-  lastname: string;
-  total_loans: number;
-  active_loans: number;
-  overdue_loans: number;
-}
+type UserStatsData = UserLoanStats;
 
 
 export default function StatsPage() {
@@ -74,14 +68,90 @@ export default function StatsPage() {
   const [isLoadingAdvancedStats, setIsLoadingAdvancedStats] = useState(false);
   const [statsParams, setStatsParams] = useState<AdvancedStatsParams | null>(null);
   
+  // Filter states for loan evolution chart
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 1);
+    return date.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [interval, setInterval] = useState<StatsInterval>('day');
+  const [mediaType, setMediaType] = useState<MediaType | ''>('');
+  
   // Timeline state
   const [timelineData, setTimelineData] = useState<LoanTimeData[]>([]);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(true);
-  
-  // User stats state
+
+  const currentYear = new Date().getFullYear();
+
+  // Catalog stats state (GET /stats/catalog)
+  const [catalogStats, setCatalogStats] = useState<CatalogStats | null>(null);
+  const [isLoadingCatalogStats, setIsLoadingCatalogStats] = useState(true);
+  const [catalogStatsYear, setCatalogStatsYear] = useState<number | 'all'>('all');
+  const [catalogStatsBySource, setCatalogStatsBySource] = useState(false);
+  const [catalogStatsByMediaType, setCatalogStatsByMediaType] = useState(false);
+  const [catalogStatsByPublicType, setCatalogStatsByPublicType] = useState(false);
+
+  // User stats state (GET /stats/users: leaderboard vs aggregate)
+  type UserStatsMode = 'leaderboard' | 'aggregate';
+  const [userStatsMode, setUserStatsMode] = useState<UserStatsMode>('aggregate');
   const [userStats, setUserStats] = useState<UserStatsData[]>([]);
+  const [userStatsAggregate, setUserStatsAggregate] = useState<UserAggregateStats | null>(null);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [userSortBy, setUserSortBy] = useState<'total_loans' | 'active_loans' | 'overdue_loans'>('total_loans');
+  const [userStatsLimit, setUserStatsLimit] = useState(20);
+  const [userStatsLeaderboardYear, setUserStatsLeaderboardYear] = useState<number | 'all'>('all');
+  const [userStatsAggregateYear, setUserStatsAggregateYear] = useState<number | 'all'>('all');
+
+  const yearOptions = Array.from({ length: 5 }, (_, index) => currentYear - index);
+
+  const MEDIA_TYPES: MediaTypeOption[] = [
+    { value: '', label: t('stats.allTypes') },
+    { value: 'u', label: t('items.mediaType.unknown') },
+    { value: 'b', label: t('items.mediaType.printedText') },
+    { value: 'bc', label: t('items.mediaType.comics') },
+    { value: 'p', label: t('items.mediaType.periodic') },
+    { value: 'v', label: t('items.mediaType.video') },
+    { value: 'vt', label: t('items.mediaType.videoTape') },
+    { value: 'vd', label: t('items.mediaType.videoDvd') },
+    { value: 'a', label: t('items.mediaType.audio') },
+    { value: 'am', label: t('items.mediaType.audioMusic') },
+    { value: 'amt', label: t('items.mediaType.audioMusicTape') },
+    { value: 'amc', label: t('items.mediaType.audioMusicCd') },
+    { value: 'an', label: t('items.mediaType.audioNonMusic') },
+    { value: 'c', label: t('items.mediaType.cdRom') },
+    { value: 'i', label: t('items.mediaType.images') },
+    { value: 'm', label: t('items.mediaType.multimedia') },
+  ];
+
+  const INTERVALS: { value: StatsInterval; label: string }[] = [
+    { value: 'day', label: t('stats.interval.day') },
+    { value: 'week', label: t('stats.interval.week') },
+    { value: 'month', label: t('stats.interval.month') },
+    { value: 'year', label: t('stats.interval.year') },
+  ];
+
+  // Update statsParams when filters change
+  useEffect(() => {
+    const startDateTime = new Date(startDate);
+    startDateTime.setHours(0, 0, 0, 0);
+    const endDateTime = new Date(endDate);
+    endDateTime.setHours(23, 59, 59, 999);
+
+    const params: AdvancedStatsParams = {
+      start_date: startDateTime.toISOString(),
+      end_date: endDateTime.toISOString(),
+      interval,
+    };
+
+    if (mediaType) {
+      params.media_type = mediaType;
+    }
+
+    setStatsParams(params);
+  }, [startDate, endDate, interval, mediaType]);
 
   // Fetch main stats
   useEffect(() => {
@@ -101,21 +171,6 @@ export default function StatsPage() {
   // Fetch advanced stats
   useEffect(() => {
     if (!statsParams) {
-      // Use default time range if no params set (30 days)
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - 30);
-      
-      // Convert to ISO 8601 format with time
-      startDate.setHours(0, 0, 0, 0);
-      endDate.setHours(23, 59, 59, 999);
-      
-      const defaultParams: AdvancedStatsParams = {
-        start_date: startDate.toISOString(),
-        end_date: endDate.toISOString(),
-        interval: 'day',
-      };
-      setStatsParams(defaultParams);
       return;
     }
 
@@ -141,38 +196,110 @@ export default function StatsPage() {
     fetchAdvancedStats();
   }, [statsParams]);
 
-  // Generate mock user stats for demo
-  const generateMockUserStats = (sortBy: typeof userSortBy): UserStatsData[] => {
-    const names = [
-      { firstname: 'Marie', lastname: 'Dupont' },
-      { firstname: 'Jean', lastname: 'Martin' },
-      { firstname: 'Sophie', lastname: 'Bernard' },
-      { firstname: 'Pierre', lastname: 'Petit' },
-      { firstname: 'Claire', lastname: 'Robert' },
-      { firstname: 'Lucas', lastname: 'Richard' },
-      { firstname: 'Emma', lastname: 'Moreau' },
-      { firstname: 'Hugo', lastname: 'Simon' },
-    ];
-    
-    return names.map((name, i) => ({
-      user_id: i + 1,
-      ...name,
-      total_loans: Math.floor(Math.random() * 50) + 5,
-      active_loans: Math.floor(Math.random() * 5),
-      overdue_loans: Math.floor(Math.random() * 3),
-    })).sort((a, b) => b[sortBy] - a[sortBy]);
+  // Helper function to convert year to start_date and end_date
+  const yearToDateRange = (year: number) => {
+    const startDate = new Date(year, 0, 1); // January 1st
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(year, 11, 31); // December 31st
+    endDate.setHours(23, 59, 59, 999);
+    return {
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
+    };
   };
 
-  // Fetch user stats (using mock data since /stats/users endpoint doesn't exist)
+  // Fetch catalog stats from API
   useEffect(() => {
-    setIsLoadingUsers(true);
-    // Simulate API call delay
-    const timer = setTimeout(() => {
-      setUserStats(generateMockUserStats(userSortBy));
-      setIsLoadingUsers(false);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [userSortBy]);
+    const fetchCatalogStats = async () => {
+      setIsLoadingCatalogStats(true);
+      try {
+        const params: {
+          start_date?: string;
+          end_date?: string;
+          by_source?: boolean;
+          by_media_type?: boolean;
+          by_public_type?: boolean;
+        } = {
+          by_source: catalogStatsBySource,
+          by_media_type: catalogStatsByMediaType,
+          by_public_type: catalogStatsByPublicType,
+        };
+
+        // Add date range only if a specific year is selected
+        if (catalogStatsYear !== 'all') {
+          const dateRange = yearToDateRange(catalogStatsYear);
+          params.start_date = dateRange.start_date;
+          params.end_date = dateRange.end_date;
+        }
+
+        const data = await api.getCatalogStats(params);
+        setCatalogStats(data);
+      } catch (error) {
+        console.error('Error fetching catalog stats:', error);
+        setCatalogStats(null);
+      } finally {
+        setIsLoadingCatalogStats(false);
+      }
+    };
+
+    fetchCatalogStats();
+  }, [catalogStatsYear, catalogStatsBySource, catalogStatsByMediaType, catalogStatsByPublicType]);
+
+  // Fetch user stats from API (leaderboard or aggregate)
+  useEffect(() => {
+    const fetchUserStats = async () => {
+      setIsLoadingUsers(true);
+      try {
+        if (userStatsMode === 'aggregate') {
+          const params: {
+            start_date?: string;
+            end_date?: string;
+          } = {};
+          
+          // Add date range only if a specific year is selected
+          if (userStatsAggregateYear !== 'all') {
+            const dateRange = yearToDateRange(userStatsAggregateYear);
+            params.start_date = dateRange.start_date;
+            params.end_date = dateRange.end_date;
+          }
+          
+          const data = await api.getUserAggregateStats(params);
+          setUserStatsAggregate(data);
+          setUserStats([]);
+        } else {
+          const params: {
+            sort_by?: 'total_loans' | 'active_loans' | 'overdue_loans';
+            limit?: number;
+            start_date?: string;
+            end_date?: string;
+          } = {
+            sort_by: userSortBy,
+            limit: userStatsLimit,
+          };
+          
+          // Add date range only if a specific year is selected
+          if (userStatsLeaderboardYear !== 'all') {
+            const dateRange = yearToDateRange(userStatsLeaderboardYear);
+            params.start_date = dateRange.start_date;
+            params.end_date = dateRange.end_date;
+          }
+          
+          const data = await api.getUserLoanStats(params);
+          const list = Array.isArray(data) ? data : (data as Record<string, unknown>)?.users ?? (data as Record<string, unknown>)?.items ?? [];
+          setUserStats(list as UserStatsData[]);
+          setUserStatsAggregate(null);
+        }
+      } catch (error) {
+        console.error('Error fetching user stats:', error);
+        setUserStats([]);
+        setUserStatsAggregate(null);
+      } finally {
+        setIsLoadingUsers(false);
+      }
+    };
+
+    fetchUserStats();
+  }, [userStatsMode, userSortBy, userStatsLimit, userStatsLeaderboardYear, userStatsAggregateYear]);
 
   const formatDate = (dateStr: string) => {
     const interval = statsParams?.interval || 'day';
@@ -202,6 +329,7 @@ export default function StatsPage() {
         return date.toLocaleDateString(i18n.language, { day: '2-digit', month: 'short' });
     }
   };
+
 
   const userColumns = [
     {
@@ -251,22 +379,26 @@ export default function StatsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+        <div className="h-10 w-10 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-600 dark:text-gray-400">{t('common.loading')}</p>
       </div>
     );
   }
 
   if (!stats) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400">{t('common.error')}</p>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-4">
+        <p className="text-gray-700 dark:text-gray-300">{t('common.error')}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {t('stats.loadError')}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-[40vh]">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('stats.title')}</h1>
         <p className="text-gray-500 dark:text-gray-400">{t('stats.subtitle')}</p>
@@ -277,203 +409,221 @@ export default function StatsPage() {
         <StatCard
           icon={BookOpen}
           label={t('stats.documents')}
-          value={stats.items.total}
+          value={stats.items?.total ?? 0}
           color="indigo"
         />
         <StatCard
           icon={Users}
           label={t('stats.activeUsers')}
-          value={stats.users.active}
-          subtitle={t('stats.totalUsers', { count: stats.users.total })}
+          value={stats.users?.active ?? 0}
+          subtitle={t('stats.totalUsers', { count: stats.users?.total ?? 0 })}
           color="emerald"
         />
         <StatCard
           icon={BookMarked}
           label={t('stats.activeLoans')}
-          value={stats.loans.active}
+          value={stats.loans?.active ?? 0}
           color="blue"
         />
         <StatCard
           icon={AlertTriangle}
           label={t('stats.overdue')}
-          value={stats.loans.overdue}
+          value={stats.loans?.overdue ?? 0}
           color="red"
         />
       </div>
 
-      {/* Advanced Stats Filters */}
-      <Card>
-        <StatsFilters
-          onFiltersChange={setStatsParams}
-          isLoading={isLoadingAdvancedStats}
-        />
-      </Card>
-
-      {/* Timeline chart */}
-      <Card>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <CardHeader
-            title={t('stats.loansEvolution')}
-            subtitle={statsParams?.media_type 
-              ? t('stats.loansByType', { 
-                  type: t(`items.mediaType.${getMediaTypeTranslationKey(statsParams.media_type)}`)
-                })
-              : t('stats.loansPerDay')
-            }
-          />
+      {/* Catalog statistics (GET /stats/catalog) */}
+      <Card padding="none">
+        <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <Library className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {t('stats.catalogSection.title')}
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {t('stats.catalogSection.subtitle')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-gray-500 dark:text-gray-400">{t('stats.year')}</span>
+                <select
+                  value={catalogStatsYear}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCatalogStatsYear(v === 'all' ? 'all' : Number(v));
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
+                >
+                  <option value="all">{t('stats.usersSection.allYears')}</option>
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-gray-200 dark:border-gray-700">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('stats.catalogSection.breakdowns')}</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={catalogStatsBySource}
+                  onChange={(e) => setCatalogStatsBySource(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">{t('stats.catalogSection.bySource')}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={catalogStatsByMediaType}
+                  onChange={(e) => setCatalogStatsByMediaType(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">{t('stats.catalogSection.byMediaType')}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={catalogStatsByPublicType}
+                  onChange={(e) => setCatalogStatsByPublicType(e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">{t('stats.catalogSection.byPublicType')}</span>
+              </label>
+            </div>
+          </div>
         </div>
 
-        {(isLoadingTimeline || isLoadingAdvancedStats) ? (
-          <div className="flex items-center justify-center h-64">
+        {isLoadingCatalogStats ? (
+          <div className="flex items-center justify-center py-12">
             <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : catalogStats ? (
+          <div className="p-4 sm:p-6">
+            <div className="space-y-6">
+              {/* Totals */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('stats.catalogSection.activeSpecimens')}</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{catalogStats.totals.active_specimens.toLocaleString()}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('stats.catalogSection.enteredSpecimens')}</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{catalogStats.totals.entered_specimens.toLocaleString()}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('stats.catalogSection.archivedSpecimens')}</p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{catalogStats.totals.archived_specimens.toLocaleString()}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('stats.catalogSection.loans')}</p>
+                  <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{catalogStats.totals.loans.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Breakdowns — hierarchical rendering */}
+              <CatalogBreakdowns catalogStats={catalogStats} t={t} />
+            </div>
+          </div>
         ) : (
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={timelineData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorLoans" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorReturns" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={formatDate}
-                  tick={{ fill: 'currentColor', fontSize: 12 }}
-                  className="text-gray-500"
-                />
-                <YAxis tick={{ fill: 'currentColor', fontSize: 12 }} className="text-gray-500" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--tooltip-bg, #fff)',
-                    borderColor: 'var(--tooltip-border, #e5e7eb)',
-                    borderRadius: '0.5rem',
-                  }}
-                  labelFormatter={(label) => {
-                    const interval = statsParams?.interval || 'day';
-                    
-                    // Handle ISO week format (YYYY-Www)
-                    if (interval === 'week' && /^\d{4}-W\d{2}$/.test(label)) {
-                      const [year, week] = label.split('-W');
-                      return t('stats.weekFormat', { year, week });
-                    }
-                    
-                    // Try to parse as date
-                    const date = new Date(label);
-                    if (isNaN(date.getTime())) {
-                      return label;
-                    }
-                    
-                    return date.toLocaleDateString(i18n.language, {
-                      weekday: interval === 'day' ? 'long' : undefined,
-                      day: 'numeric',
-                      month: 'long',
-                      year: interval === 'year' ? 'numeric' : undefined,
-                    });
-                  }}
-                />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="loans"
-                  name={t('stats.chart.loans')}
-                  stroke="#6366f1"
-                  strokeWidth={2}
-                  fill="url(#colorLoans)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="returns"
-                  name={t('stats.chart.returns')}
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  fill="url(#colorReturns)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="p-4 sm:p-6">
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('common.noResults')}</p>
           </div>
         )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Items by media type */}
-        <Card>
-          <CardHeader title={t('stats.documentsByType')} />
-          <div className="space-y-3">
-            {stats.items.by_media_type.map((entry) => (
-              <ProgressBar
-                key={entry.label}
-                label={entry.label}
-                value={entry.value}
-                max={stats.items.total}
-                color="indigo"
-              />
-            ))}
-          </div>
-        </Card>
-
-        {/* Loans by media type - Bar chart */}
-        <Card>
-          <CardHeader title={t('stats.loansByDocumentType')} />
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.loans.by_media_type} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis type="number" tick={{ fill: 'currentColor', fontSize: 12 }} />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  tick={{ fill: 'currentColor', fontSize: 12 }}
-                  width={80}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--tooltip-bg, #fff)',
-                    borderColor: 'var(--tooltip-border, #e5e7eb)',
-                    borderRadius: '0.5rem',
-                  }}
-                />
-                <Bar dataKey="value" name={t('stats.chart.loans')} fill="#3b82f6" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </div>
-
-      {/* User statistics */}
+      {/* User statistics (GET /stats/users: leaderboard or aggregate) */}
       <Card padding="none">
         <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <User className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                  <User className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {t('stats.usersSection.title')}
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {userStatsMode === 'leaderboard' ? t('stats.topBorrowers') : t('stats.usersSection.aggregateSubtitle')}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {t('stats.userStats')}
-                </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {t('stats.topBorrowers')}
-                </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-gray-500 dark:text-gray-400">{t('stats.usersSection.mode')}</span>
+                <select
+                  value={userStatsMode}
+                  onChange={(e) => setUserStatsMode(e.target.value as UserStatsMode)}
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
+                >
+                  <option value="aggregate">{t('stats.usersSection.modeAggregate')}</option>
+                  <option value="leaderboard">{t('stats.usersSection.modeLeaderboard')}</option>
+                </select>
+                {userStatsMode === 'aggregate' && (
+                  <>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{t('stats.year')}</span>
+                    <select
+                      value={userStatsAggregateYear}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setUserStatsAggregateYear(v === 'all' ? 'all' : Number(v));
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
+                    >
+                      <option value="all">{t('stats.usersSection.allYears')}</option>
+                      {yearOptions.map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+                {userStatsMode === 'leaderboard' && (
+                  <>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{t('stats.year')}</span>
+                    <select
+                      value={userStatsLeaderboardYear}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setUserStatsLeaderboardYear(v === 'all' ? 'all' : Number(v));
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
+                    >
+                      <option value="all">{t('stats.usersSection.allYears')}</option>
+                      {yearOptions.map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{t('stats.sortBy')}</span>
+                    <select
+                      value={userSortBy}
+                      onChange={(e) => setUserSortBy(e.target.value as typeof userSortBy)}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
+                    >
+                      <option value="total_loans">{t('stats.totalLoans')}</option>
+                      <option value="active_loans">{t('stats.activeLoansSort')}</option>
+                      <option value="overdue_loans">{t('stats.overdueLoansSort')}</option>
+                    </select>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{t('stats.usersSection.limit')}</span>
+                    <select
+                      value={userStatsLimit}
+                      onChange={(e) => setUserStatsLimit(Number(e.target.value))}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
+                    >
+                      {[10, 20, 50, 100].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500 dark:text-gray-400">{t('stats.sortBy')}</span>
-              <select
-                value={userSortBy}
-                onChange={(e) => setUserSortBy(e.target.value as typeof userSortBy)}
-                className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300"
-              >
-                <option value="total_loans">{t('stats.totalLoans')}</option>
-                <option value="active_loans">{t('stats.activeLoansSort')}</option>
-                <option value="overdue_loans">{t('stats.overdueLoansSort')}</option>
-              </select>
             </div>
           </div>
         </div>
@@ -481,6 +631,83 @@ export default function StatsPage() {
         {isLoadingUsers ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : userStatsMode === 'aggregate' ? (
+          <div className="p-4 sm:p-6">
+            {userStatsAggregate ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('stats.usersSection.usersTotal')}</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{userStatsAggregate.users_total.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-purple-50 dark:bg-purple-900/20">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('stats.usersSection.newUsersTotal')}</p>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{userStatsAggregate.new_users_total.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('stats.usersSection.activeBorrowersTotal')}</p>
+                    <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{userStatsAggregate.active_borrowers_total.toLocaleString()}</p>
+                  </div>
+                </div>
+                {((userStatsAggregate.new_users_by_public_type?.length ?? 0) > 0 || 
+                  (userStatsAggregate.active_borrowers_by_public_type?.length ?? 0) > 0 ||
+                  (userStatsAggregate.users_by_public_type?.length ?? 0) > 0) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Colonne 1: Total users */}
+                    <div className="space-y-4">
+                      {userStatsAggregate.users_by_public_type && userStatsAggregate.users_by_public_type.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('stats.usersSection.usersByPublicType')}</h3>
+                          <ul className="space-y-1">
+                            {userStatsAggregate.users_by_public_type.map((e) => (
+                              <li key={e.label} className="flex justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">{translateStatLabel(t, e.label, 'publicType')}</span>
+                                <span className="font-medium">{e.value.toLocaleString()}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    {/* Colonne 2: Nouveaux inscrits */}
+                    <div className="space-y-4">
+                      {userStatsAggregate.new_users_by_public_type && userStatsAggregate.new_users_by_public_type.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('stats.usersSection.newUsersByPublicType')}</h3>
+                          <ul className="space-y-1">
+                            {userStatsAggregate.new_users_by_public_type.map((e) => (
+                              <li key={e.label} className="flex justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">{translateStatLabel(t, e.label, 'publicType')}</span>
+                                <span className="font-medium">{e.value.toLocaleString()}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    {/* Colonne 3: Emprunteurs actifs */}
+                    <div className="space-y-4">
+                      {userStatsAggregate.active_borrowers_by_public_type && userStatsAggregate.active_borrowers_by_public_type.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('stats.usersSection.activeBorrowersByPublicType')}</h3>
+                          <ul className="space-y-1">
+                            {userStatsAggregate.active_borrowers_by_public_type.map((e) => (
+                              <li key={e.label} className="flex justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">{translateStatLabel(t, e.label, 'publicType')}</span>
+                                <span className="font-medium">{e.value.toLocaleString()}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('common.noResults')}</p>
+            )}
           </div>
         ) : (
           <Table
@@ -493,45 +720,424 @@ export default function StatsPage() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Users by account type */}
-        <Card>
-          <CardHeader title={t('stats.usersByAccountType')} />
-          <div className="space-y-3">
-            {stats.users.by_account_type.map((entry) => (
-              <ProgressBar
-                key={entry.label}
-                label={entry.label}
-                value={entry.value}
-                max={stats.users.total}
-                color="emerald"
-              />
-            ))}
-          </div>
-        </Card>
+      {/* Timeline chart */}
+      <Card>
+        <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800">
+          <CardHeader
+            title={t('stats.loansEvolution')}
+            subtitle={statsParams?.media_type 
+              ? t('stats.loansByType', { 
+                  type: t(`items.mediaType.${getMediaTypeTranslationKey(statsParams.media_type)}`)
+                })
+              : t('stats.loansPerDay')
+            }
+          />
+        </div>
 
-        {/* Quick stats */}
-        <Card>
-          <CardHeader title={t('stats.todayActivity')} />
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20">
-              <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                {stats.loans.returned_today}
-              </p>
-              <p className="text-sm text-green-700 dark:text-green-300">{t('stats.returnedToday')}</p>
+        <div className="p-4 sm:p-6">
+          {(isLoadingTimeline || isLoadingAdvancedStats) ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
             </div>
-            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20">
-              <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">
-                {stats.loans.overdue}
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-300">{t('stats.overdue')}</p>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={timelineData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorLoans" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorReturns" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={formatDate}
+                    tick={{ fill: 'currentColor', fontSize: 12 }}
+                    className="text-gray-500"
+                  />
+                  <YAxis tick={{ fill: 'currentColor', fontSize: 12 }} className="text-gray-500" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--tooltip-bg, #fff)',
+                      borderColor: 'var(--tooltip-border, #e5e7eb)',
+                      borderRadius: '0.5rem',
+                    }}
+                    labelFormatter={(label) => {
+                      const interval = statsParams?.interval || 'day';
+                      
+                      // Handle ISO week format (YYYY-Www)
+                      if (interval === 'week' && /^\d{4}-W\d{2}$/.test(label)) {
+                        const [year, week] = label.split('-W');
+                        return t('stats.weekFormat', { year, week });
+                      }
+                      
+                      // Try to parse as date
+                      const date = new Date(label);
+                      if (isNaN(date.getTime())) {
+                        return label;
+                      }
+                      
+                      return date.toLocaleDateString(i18n.language, {
+                        weekday: interval === 'day' ? 'long' : undefined,
+                        day: 'numeric',
+                        month: 'long',
+                        year: interval === 'year' ? 'numeric' : undefined,
+                      });
+                    }}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="loans"
+                    name={t('stats.chart.loans')}
+                    stroke="#6366f1"
+                    strokeWidth={2}
+                    fill="url(#colorLoans)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="returns"
+                    name={t('stats.chart.returns')}
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    fill="url(#colorReturns)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('stats.startDate')}
+              </label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('stats.endDate')}
+              </label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('stats.intervalLabel')}
+              </label>
+              <select
+                value={interval}
+                onChange={(e) => setInterval(e.target.value as StatsInterval)}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              >
+                {INTERVALS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('stats.mediaType')}
+              </label>
+              <select
+                value={mediaType}
+                onChange={(e) => setMediaType(e.target.value as MediaType | '')}
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              >
+                {MEDIA_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        </Card>
-      </div>
+        </div>
+      </Card>
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Catalog breakdowns – hierarchical display
+// The server returns only one root-level list per combination of flags.
+// Nesting is detected by checking for by_media_type / by_public_type in entries.
+// ---------------------------------------------------------------------------
+
+type TFn = (key: string, options?: Record<string, unknown>) => string;
+
+function CatalogBreakdowns({ catalogStats, t }: { catalogStats: CatalogStats; t: TFn }) {
+  // Filter out entries with 0 active specimens (recursively)
+  const filterActive = (list?: CatalogStatsBreakdown[]): CatalogStatsBreakdown[] | undefined => {
+    if (!list) return undefined;
+    const filtered = list
+      .filter((e) => e.active_specimens > 0)
+      .map((e) => ({
+        ...e,
+        by_media_type: filterActive(e.by_media_type),
+        by_public_type: filterActive(e.by_public_type),
+      }));
+    return filtered.length > 0 ? filtered : undefined;
+  };
+
+  const sources = filterActive(catalogStats.by_source);
+  const mediaTypes = filterActive(catalogStats.by_media_type);
+  const publicTypes = filterActive(catalogStats.by_public_type);
+
+  const hasSources = (sources?.length ?? 0) > 0;
+  const hasMedia = (mediaTypes?.length ?? 0) > 0;
+  const hasPublic = (publicTypes?.length ?? 0) > 0;
+
+  if (!hasSources && !hasMedia && !hasPublic) return null;
+
+  return (
+    <div className="space-y-4">
+      {hasSources && (
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            {t('stats.catalogSection.bySource')}
+          </h3>
+          <div className="space-y-2">
+            {(() => {
+              const sourcesTotal = sources!.length > 0 
+                ? sources!.reduce((sum, s) => sum + s.active_specimens, 0)
+                : undefined;
+              
+              return sources!.map((source, idx) => {
+                const sourceLabel = source.source_name || `Source ${source.source_id}`;
+                const hasNestedMedia = (source.by_media_type?.length ?? 0) > 0;
+                const hasNestedPublic = !hasNestedMedia && (source.by_public_type?.length ?? 0) > 0;
+                const nestedMediaTotal = hasNestedMedia && source.by_media_type!.length > 0
+                  ? source.by_media_type!.reduce((sum, m) => sum + m.active_specimens, 0)
+                  : undefined;
+
+                if (!hasNestedMedia && !hasNestedPublic) {
+                  return <CatalogFlatItem key={source.source_id ?? idx} label={sourceLabel} item={source} t={t} totalValue={sourcesTotal} />;
+                }
+
+                return (
+                  <CatalogAccordionItem key={source.source_id ?? idx} label={sourceLabel} item={source} t={t} totalValue={sourcesTotal}>
+                    {hasNestedMedia && (
+                      <div className="space-y-2">
+                        {source.by_media_type!.map((media, mIdx) => {
+                          const mediaLabel = translateStatLabel(t, media.label || '', 'mediaType');
+                          const hasNestedPub = (media.by_public_type?.length ?? 0) > 0;
+
+                          if (!hasNestedPub) {
+                            return <CatalogFlatItem key={media.label ?? mIdx} label={mediaLabel} item={media} t={t} totalValue={nestedMediaTotal} />;
+                          }
+
+                          return (
+                            <CatalogAccordionItem key={media.label ?? mIdx} label={mediaLabel} item={media} t={t} nested totalValue={nestedMediaTotal}>
+                              <CatalogPublicTypeList items={media.by_public_type!} t={t} />
+                            </CatalogAccordionItem>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {hasNestedPublic && (
+                      <CatalogPublicTypeList items={source.by_public_type!} t={t} />
+                    )}
+                  </CatalogAccordionItem>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
+
+      {hasMedia && (
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            {t('stats.catalogSection.byMediaType')}
+          </h3>
+          <div className="space-y-2">
+            {(() => {
+              const mediaTotal = mediaTypes!.length > 0 
+                ? mediaTypes!.reduce((sum, m) => sum + m.active_specimens, 0)
+                : undefined;
+              
+              return mediaTypes!.map((media, idx) => {
+                const mediaLabel = translateStatLabel(t, media.label || '', 'mediaType');
+                const hasNestedPub = (media.by_public_type?.length ?? 0) > 0;
+
+                if (!hasNestedPub) {
+                  return <CatalogFlatItem key={media.label ?? idx} label={mediaLabel} item={media} t={t} totalValue={mediaTotal} />;
+                }
+
+                return (
+                  <CatalogAccordionItem key={media.label ?? idx} label={mediaLabel} item={media} t={t} totalValue={mediaTotal}>
+                    <CatalogPublicTypeList items={media.by_public_type!} t={t} />
+                  </CatalogAccordionItem>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
+
+      {hasPublic && (
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            {t('stats.catalogSection.byPublicType')}
+          </h3>
+          <div className="space-y-2">
+            {(() => {
+              const publicTotal = publicTypes!.length > 0 
+                ? publicTypes!.reduce((sum, p) => sum + p.active_specimens, 0)
+                : undefined;
+              
+              return publicTypes!.map((pub, idx) => (
+                <CatalogFlatItem
+                  key={pub.label ?? idx}
+                  label={translateStatLabel(t, pub.label || '', 'publicType')}
+                  item={pub}
+                  t={t}
+                  totalValue={publicTotal}
+                />
+              ));
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 4-column metrics display */
+function CatalogMetrics({ item, t, totalValue }: { item: CatalogStatsBreakdown; t: TFn; totalValue?: number }) {
+  const percentage = totalValue && totalValue > 0 ? (item.active_specimens / totalValue) * 100 : 0;
+  
+  return (
+    <div>
+      <div className="grid grid-cols-4 gap-2 text-xs mb-2">
+        <div>
+          <span className="text-gray-500 dark:text-gray-400">{t('stats.catalogSection.active')}</span>
+          <p className="font-medium">{item.active_specimens.toLocaleString()}</p>
+        </div>
+        <div>
+          <span className="text-gray-500 dark:text-gray-400">{t('stats.catalogSection.entered')}</span>
+          <p className="font-medium">{item.entered_specimens.toLocaleString()}</p>
+        </div>
+        <div>
+          <span className="text-gray-500 dark:text-gray-400">{t('stats.catalogSection.archived')}</span>
+          <p className="font-medium">{item.archived_specimens.toLocaleString()}</p>
+        </div>
+        <div>
+          <span className="text-gray-500 dark:text-gray-400">{t('stats.catalogSection.loans')}</span>
+          <p className="font-medium">{item.loans.toLocaleString()}</p>
+        </div>
+      </div>
+      {totalValue !== undefined && (
+        <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-500"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Simple flat item (no children) */
+function CatalogFlatItem({ label, item, t, totalValue }: { label: string; item: CatalogStatsBreakdown; t: TFn; totalValue?: number }) {
+  return (
+    <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+      <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">{label}</p>
+      <CatalogMetrics item={item} t={t} totalValue={totalValue} />
+    </div>
+  );
+}
+
+/** Flat list of public_type items — used as leaf level */
+function CatalogPublicTypeList({ items, t }: { items: CatalogStatsBreakdown[]; t: TFn }) {
+  const totalValue = items.length > 0 
+    ? items.reduce((sum, item) => sum + item.active_specimens, 0)
+    : undefined;
+  
+  return (
+    <div className="space-y-1.5">
+      {items.map((pub, idx) => (
+        <div key={pub.label ?? idx} className="p-2.5 rounded-md bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700/50">
+          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {translateStatLabel(t, pub.label || '', 'publicType')}
+          </p>
+          <CatalogMetrics item={pub} t={t} totalValue={totalValue} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Collapsible accordion item — expands children when it has nested data */
+function CatalogAccordionItem({
+  label,
+  item,
+  t,
+  nested,
+  children,
+  totalValue,
+}: {
+  label: string;
+  item: CatalogStatsBreakdown;
+  t: TFn;
+  nested?: boolean;
+  children?: React.ReactNode;
+  totalValue?: number;
+}) {
+  const hasChildren = !!children;
+  const [open, setOpen] = useState(false);
+
+  const bgClass = nested
+    ? 'bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700/50'
+    : 'bg-gray-50 dark:bg-gray-800/50';
+
+  return (
+    <div className={`rounded-lg ${bgClass} overflow-hidden`}>
+      <button
+        type="button"
+        onClick={() => hasChildren && setOpen((o) => !o)}
+        className={`w-full p-3 text-left ${hasChildren ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/40' : 'cursor-default'}`}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          {hasChildren && (
+            open
+              ? <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              : <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          )}
+          <p className={`text-sm font-medium text-gray-900 dark:text-white ${!hasChildren ? 'ml-6' : ''}`}>
+            {label}
+          </p>
+        </div>
+        <CatalogMetrics item={item} t={t} totalValue={totalValue} />
+      </button>
+
+      {hasChildren && open && (
+        <div className="border-t border-gray-200 dark:border-gray-700 px-3 pb-3 pt-2 ml-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 interface StatCardProps {
   icon: React.ComponentType<{ className?: string }>;
@@ -566,38 +1172,5 @@ function StatCard({ icon: Icon, label, value, subtitle, color }: StatCardProps) 
         </div>
       </div>
     </Card>
-  );
-}
-
-interface ProgressBarProps {
-  label: string;
-  value: number;
-  max: number;
-  color: 'indigo' | 'emerald' | 'blue' | 'red';
-}
-
-function ProgressBar({ label, value, max, color }: ProgressBarProps) {
-  const percentage = max > 0 ? (value / max) * 100 : 0;
-  
-  const colors = {
-    indigo: 'bg-indigo-500',
-    emerald: 'bg-emerald-500',
-    blue: 'bg-blue-500',
-    red: 'bg-red-500',
-  };
-
-  return (
-    <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-gray-700 dark:text-gray-300">{label}</span>
-        <span className="text-gray-500 dark:text-gray-400">{value.toLocaleString()}</span>
-      </div>
-      <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full ${colors[color]} rounded-full transition-all duration-500`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-    </div>
   );
 }

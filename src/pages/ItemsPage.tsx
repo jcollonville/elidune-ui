@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, BookOpen, Filter, Search } from 'lucide-react';
+import { Plus, BookOpen, Filter, Search, Globe, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { Card, Button, Table, Badge, Pagination, SearchInput, Modal, Input } from '@/components/common';
 import { useAuth } from '@/contexts/AuthContext';
 import { canManageItems, type MediaType, type MediaTypeOption } from '@/types';
 import api from '@/services/api';
-import type { ItemShort, Author } from '@/types';
+import type { ItemShort, Author, Z3950Server } from '@/types';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -105,8 +105,8 @@ export default function ItemsPage() {
       header: t('items.titleField'),
       render: (item: ItemShort) => (
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
-            <BookOpen className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+            <BookOpen className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
           <div className="min-w-0">
             <p className="font-medium text-gray-900 dark:text-white truncate">
@@ -298,6 +298,11 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
     publication_date: '',
   });
 
+  // Z3950 search states
+  const [z3950Servers, setZ3950Servers] = useState<Z3950Server[]>([]);
+  const [isSearchingZ3950, setIsSearchingZ3950] = useState(false);
+  const [z3950Message, setZ3950Message] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const MEDIA_TYPES: MediaTypeOption[] = [
     { value: 'u', label: t('items.mediaType.unknown') },
     { value: 'b', label: t('items.mediaType.printedText') },
@@ -315,6 +320,63 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
     { value: 'i', label: t('items.mediaType.images') },
     { value: 'm', label: t('items.mediaType.multimedia') },
   ];
+
+  // Load Z39.50 servers on mount
+  useEffect(() => {
+    const fetchServers = async () => {
+      try {
+        const settings = await api.getSettings();
+        const activeServers = (settings.z3950_servers || []).filter(s => s.is_active);
+        setZ3950Servers(activeServers);
+      } catch (error) {
+        console.error('Error fetching Z39.50 servers:', error);
+      }
+    };
+    fetchServers();
+  }, []);
+
+  const handleZ3950Search = async () => {
+    if (!formData.identification.trim()) {
+      setZ3950Message({ type: 'error', text: t('z3950.isbnRequired') });
+      return;
+    }
+
+    if (z3950Servers.length === 0) {
+      setZ3950Message({ type: 'error', text: t('z3950.noServers') });
+      return;
+    }
+
+    setIsSearchingZ3950(true);
+    setZ3950Message(null);
+
+    try {
+      // Use first active server
+      const response = await api.searchZ3950({
+        isbn: formData.identification,
+        server_id: z3950Servers[0].id,
+        max_results: 1,
+      });
+
+      if (response.items && response.items.length > 0) {
+        const item = response.items[0];
+        // Prefill form with Z39.50 data
+        setFormData({
+          ...formData,
+          title1: item.title || formData.title1,
+          media_type: item.media_type || formData.media_type,
+          publication_date: item.date || formData.publication_date,
+        });
+        setZ3950Message({ type: 'success', text: t('z3950.dataFound') });
+      } else {
+        setZ3950Message({ type: 'error', text: t('z3950.noResults') });
+      }
+    } catch (error) {
+      console.error('Error searching Z39.50:', error);
+      setZ3950Message({ type: 'error', text: t('z3950.searchError') });
+    } finally {
+      setIsSearchingZ3950(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -338,11 +400,38 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
         required
       />
       <div className="grid grid-cols-2 gap-4">
-        <Input
-          label={t('items.isbn')}
-          value={formData.identification}
-          onChange={(e) => setFormData({ ...formData, identification: e.target.value })}
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            {t('items.isbn')}
+          </label>
+          <div className="flex gap-2">
+            <Input
+              value={formData.identification}
+              onChange={(e) => {
+                setFormData({ ...formData, identification: e.target.value });
+                setZ3950Message(null);
+              }}
+              placeholder={t('z3950.isbnPlaceholder')}
+              className="flex-1"
+            />
+            {z3950Servers.length > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleZ3950Search}
+                disabled={isSearchingZ3950 || !formData.identification.trim()}
+                title={t('z3950.searchButton')}
+                className="flex-shrink-0"
+              >
+                {isSearchingZ3950 ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Globe className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             {t('items.mediaTypeLabel')}
@@ -360,6 +449,22 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
           </select>
         </div>
       </div>
+      
+      {/* Z39.50 search message */}
+      {z3950Message && (
+        <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+          z3950Message.type === 'success' 
+            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+            : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+        }`}>
+          {z3950Message.type === 'success' ? (
+            <CheckCircle className="h-4 w-4 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          )}
+          <span>{z3950Message.text}</span>
+        </div>
+      )}
       <Input
         label={t('items.publicationDate')}
         value={formData.publication_date}

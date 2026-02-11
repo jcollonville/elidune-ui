@@ -27,6 +27,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import api from '@/services/api';
 import type { SupportedLanguage } from '@/locales';
 import type { TwoFactorMethod } from '@/types';
+import { OCCUPATION_OPTIONS } from '@/utils/codeLabels';
 
 export default function ProfilePage() {
   const { t } = useTranslation();
@@ -299,14 +300,28 @@ export default function ProfilePage() {
                 />
               </div>
 
-              <Input
-                label={t('profile.occupation')}
-                type="number"
-                value={profileData.occupation_id}
-                onChange={(e) => setProfileData({ ...profileData, occupation_id: e.target.value })}
-                leftIcon={<Briefcase className="h-4 w-4" />}
-                hint={t('profile.occupationHint')}
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {t('profile.occupation')}
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Briefcase className="h-4 w-4" />
+                  </div>
+                  <select
+                    value={profileData.occupation_id}
+                    onChange={(e) => setProfileData({ ...profileData, occupation_id: e.target.value })}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="">{t('common.select')}</option>
+                    {OCCUPATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {t(opt.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -518,7 +533,7 @@ export default function ProfilePage() {
             </div>
 
             <Button
-              variant={user?.two_factor_enabled ? 'outline' : 'primary'}
+              variant={user?.two_factor_enabled ? 'secondary' : 'primary'}
               onClick={() => setShow2FAModal(true)}
               leftIcon={user?.two_factor_enabled 
                 ? <ShieldOff className="h-4 w-4" /> 
@@ -553,7 +568,7 @@ export default function ProfilePage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={handleClose2FAModal}>
+              <Button variant="secondary" onClick={handleClose2FAModal}>
                 {t('common.cancel')}
               </Button>
               <Button
@@ -676,7 +691,7 @@ export default function ProfilePage() {
             )}
 
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={handleClose2FAModal}>
+              <Button variant="secondary" onClick={handleClose2FAModal}>
                 {t('common.cancel')}
               </Button>
               <Button

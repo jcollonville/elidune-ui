@@ -20,6 +20,7 @@ import { canManageItems, type MediaType } from '@/types';
 import api from '@/services/api';
 import type { Item, Specimen, Author } from '@/types';
 import { useTranslation } from 'react-i18next';
+import { LANG_OPTIONS, FUNCTION_OPTIONS, getCodeLabel } from '@/utils/codeLabels';
 
 // Helper function to get translation key for media type
 function getMediaTypeTranslationKey(mediaType: MediaType): string {
@@ -83,8 +84,14 @@ export default function ItemDetailPage() {
   };
 
   const formatAuthors = (authors?: Author[]) => {
-    if (!authors || authors.length === 0) return 'Non renseigné';
-    return authors.map((a) => `${a.firstname || ''} ${a.lastname || ''}`.trim()).join(', ');
+    if (!authors || authors.length === 0) return t('items.notSpecified');
+    return authors
+      .map((a) => {
+        const name = `${a.firstname || ''} ${a.lastname || ''}`.trim();
+        const func = a.function ? getCodeLabel(t, FUNCTION_OPTIONS, a.function) : '';
+        return func ? `${name} (${func})` : name;
+      })
+      .join(', ');
   };
 
   if (isLoading) {
@@ -159,7 +166,10 @@ export default function ItemDetailPage() {
               <InfoRow icon={User} label="Auteur(s) secondaire" value={formatAuthors(item.authors2)} />
               <InfoRow icon={Calendar} label="Date de publication" value={item.publication_date} />
               <InfoRow icon={Building} label="Éditeur" value={item.edition?.name} />
-              <InfoRow icon={MapPin} label="Lieu d'édition" value={item.edition?.place} />
+              <InfoRow icon={MapPin} label={t('items.publicationPlace')} value={item.edition?.place} />
+              {item.lang !== undefined && item.lang !== null && (
+                <InfoRow icon={BookOpen} label={t('items.language')} value={getCodeLabel(t, LANG_OPTIONS, item.lang)} />
+              )}
             </div>
           </Card>
 

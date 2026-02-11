@@ -74,8 +74,8 @@ export default function Layout({ children }: LayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-800">
-            <Link to="/" className="flex items-center gap-2">
-              <BookOpen className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+            <Link to="/" className="flex items-center gap-3">
+              <img src="/elidune_logo.png" alt="Elidune" className="h-10 w-10" />
               <span className="text-xl font-bold text-gray-900 dark:text-white">Elidune</span>
             </Link>
             <button
@@ -97,7 +97,7 @@ export default function Layout({ children }: LayoutProps) {
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
+                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                       : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -137,8 +137,8 @@ export default function Layout({ children }: LayoutProps) {
                 className="flex items-center gap-3 flex-1 min-w-0 p-2 -m-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 title={t('nav.profile')}
               >
-                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
-                  <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
                     {user?.firstname?.[0] || user?.username?.[0] || '?'}
                   </span>
                 </div>
@@ -173,8 +173,8 @@ export default function Layout({ children }: LayoutProps) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex items-center gap-2 ml-4">
-            <BookOpen className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex items-center gap-3 ml-4">
+            <img src="/elidune_logo.png" alt="Elidune" className="h-8 w-8" />
             <span className="text-lg font-bold text-gray-900 dark:text-white">Elidune</span>
           </div>
         </header>

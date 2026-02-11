@@ -69,6 +69,7 @@ export default function Z3950SearchPage() {
     title: '',
     author: '',
   });
+  const [maxResults, setMaxResults] = useState<number>(50);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
@@ -131,7 +132,7 @@ export default function Z3950SearchPage() {
         title: searchParams.title || undefined,
         author: searchParams.author || undefined,
         server_id: selectedServerId,
-        max_results: 50,
+        max_results: maxResults,
       });
       setResults(response.items);
       setTotalResults(response.total);
@@ -338,13 +339,7 @@ export default function Z3950SearchPage() {
           </div>
 
           {/* Search criteria */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label={t('z3950.isbn')}
-              value={searchParams.isbn}
-              onChange={(e) => setSearchParams({ ...searchParams, isbn: e.target.value })}
-              placeholder={t('z3950.isbnPlaceholder')}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-4">
             <Input
               label={t('items.titleField')}
               value={searchParams.title}
@@ -352,11 +347,33 @@ export default function Z3950SearchPage() {
               placeholder={t('z3950.titlePlaceholder')}
             />
             <Input
+              label={t('z3950.isbn')}
+              value={searchParams.isbn}
+              onChange={(e) => setSearchParams({ ...searchParams, isbn: e.target.value })}
+              placeholder={t('z3950.isbnPlaceholder')}
+            />
+            <Input
               label={t('items.author')}
               value={searchParams.author}
               onChange={(e) => setSearchParams({ ...searchParams, author: e.target.value })}
               placeholder={t('z3950.authorPlaceholder')}
             />
+            {/* Max results selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                {t('z3950.maxResults')}
+              </label>
+              <select
+                value={maxResults}
+                onChange={(e) => setMaxResults(Number(e.target.value))}
+                className="w-auto min-w-20 rounded-lg border bg-white dark:bg-gray-900 px-3 py-2.5 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-700 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:focus:ring-amber-500/40"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
 
           {searchError && (

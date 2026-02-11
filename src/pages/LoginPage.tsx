@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, LogIn, Shield, ArrowLeft, KeyRound } from 'lucide-react';
+import { LogIn, Shield, ArrowLeft, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Card } from '@/components/common';
 
@@ -91,8 +91,8 @@ function TwoFactorVerification() {
   return (
     <Card className="w-full max-w-md relative">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/50 mb-4">
-          <Shield className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-900/50 mb-4">
+          <Shield className="h-8 w-8 text-amber-600 dark:text-amber-400" />
         </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           {t('auth.2fa.title')}
@@ -128,7 +128,7 @@ function TwoFactorVerification() {
                 className="w-12 h-14 text-center text-2xl font-mono font-bold
                   border-2 border-gray-300 dark:border-gray-600 rounded-lg
                   bg-white dark:bg-gray-800 text-gray-900 dark:text-white
-                  focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20
+                  focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20
                   transition-colors"
               />
             ))}
@@ -147,7 +147,7 @@ function TwoFactorVerification() {
               type="checkbox"
               checked={trustDevice}
               onChange={(e) => setTrustDevice(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+              className="w-4 h-4 text-amber-600 bg-gray-100 border-gray-300 rounded focus:ring-amber-500 dark:focus:ring-amber-500 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">
               {t('auth.2fa.trustDevice')}
@@ -176,7 +176,7 @@ function TwoFactorVerification() {
             setRecoveryCode('');
             setTrustDevice(false);
           }}
-          className="w-full text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+          className="w-full text-sm text-amber-600 dark:text-amber-400 hover:underline"
         >
           {useRecoveryCode ? t('auth.2fa.useCode') : t('auth.2fa.useRecovery')}
         </button>
@@ -227,11 +227,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-800 p-4">
       {/* Background pattern */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-200 dark:bg-indigo-900/30 rounded-full blur-3xl opacity-50" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-200 dark:bg-purple-900/30 rounded-full blur-3xl opacity-50" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-amber-200 dark:bg-amber-900/30 rounded-full blur-3xl opacity-50" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gray-200 dark:bg-gray-800/30 rounded-full blur-3xl opacity-50" />
       </div>
 
       {pending2FA ? (
@@ -239,8 +239,8 @@ export default function LoginPage() {
       ) : (
         <Card className="w-full max-w-md relative">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/50 mb-4">
-              <BookOpen className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+            <div className="inline-flex items-center justify-center mb-4">
+              <img src="/elidune_logo.png" alt="Elidune" className="h-24 w-24" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('auth.loginTitle')}</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-1">{t('auth.loginSubtitle')}</p>

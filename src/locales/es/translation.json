@@ -106,8 +106,8 @@
     "loginUsername": "Nombre de usuario",
     "loginHint": "Mínimo 3 caracteres",
     "birthdate": "Fecha de nacimiento",
-    "occupation": "Ocupación (ID)",
-    "occupationHint": "Identificador de ocupación",
+    "occupation": "Ocupación",
+    "occupationHint": "Categoría profesional",
     "address": "Dirección",
     "street": "Calle",
     "zipCode": "Código postal",
@@ -155,7 +155,25 @@
     "reader": "Lector",
     "librarian": "Bibliotecario",
     "administrator": "Administrador",
-    "guest": "Invitado"
+    "guest": "Invitado",
+    "information": "Información",
+    "createdAt": "Fecha de creación",
+    "loanStatistics": "Estadísticas de préstamos",
+    "totalLoansAllTime": "{{count}} préstamo(s) en total",
+    "totalLoansLabel": "Total préstamos",
+    "returnsLastYear": "Devoluciones (12 meses)",
+    "loansLastYear": "Préstamos (12 meses)",
+    "returnsInPeriod": "Devoluciones (período)",
+    "loansInPeriod": "Préstamos (período)",
+    "noStatsAvailable": "No hay estadísticas disponibles",
+    "identity": "Identidad",
+    "contact": "Contacto",
+    "additionalInfo": "Información adicional",
+    "notes": "Notas",
+    "fee": "Tarifa",
+    "groupId": "Grupo (ID)",
+    "publicType": "Tipo público",
+    "statusField": "Estado"
   },
   "items": {
     "title": "Catálogo",
@@ -180,9 +198,10 @@
     "keywords": "Palabras clave",
     "keywordsHint": "Separadas por comas",
     "subject": "Tema",
+    "language": "Idioma",
     "mediaTypeLabel": "Tipo de documento",
     "mediaType": {
-      "unknown": "Desconocido",
+      "unknown": "No especificado",
       "printedText": "Texto impreso",
       "comics": "Cómic",
       "periodic": "Publicación periódica",
@@ -247,6 +266,7 @@
   "stats": {
     "title": "Estadísticas",
     "subtitle": "Resumen de la biblioteca",
+    "loadError": "No se pueden cargar las estadísticas. Compruebe su conexión o los derechos de acceso.",
     "documents": "Documentos",
     "activeUsers": "Usuarios activos",
     "totalUsers": "{{count}} total",
@@ -265,15 +285,107 @@
     "totalLoans": "Préstamos totales",
     "activeLoansSort": "Préstamos activos",
     "overdueLoansSort": "Atrasados",
+    "catalogSection": {
+      "title": "Estadísticas del catálogo",
+      "subtitle": "Ejemplares activos, ingresados y archivados",
+      "breakdowns": "Desgloses",
+      "bySource": "Por fuente",
+      "byMediaType": "Por tipo de medio",
+      "byPublicType": "Por tipo de público",
+      "activeSpecimens": "Ejemplares activos",
+      "enteredSpecimens": "Ejemplares ingresados",
+      "archivedSpecimens": "Ejemplares archivados",
+      "active": "Activos",
+      "entered": "Ingresados",
+      "archived": "Archivados",
+      "loans": "Préstamos"
+    },
+    "usersSection": {
+      "title": "Estadísticas de usuarios",
+      "aggregateSubtitle": "Nuevas inscripciones y prestatarios activos por año",
+      "mode": "Modo",
+      "modeLeaderboard": "Clasificación",
+      "modeAggregate": "Agregado",
+      "limit": "Límite",
+      "allYears": "Todos los años",
+      "newUsersTotal": "Nuevos usuarios",
+      "activeBorrowersTotal": "Prestatarios",
+      "activeUsersTotal": "Usuarios con préstamos activos",
+      "usersTotal": "Total usuarios",
+      "newUsersByPublicType": "Nuevos usuarios por público",
+      "activeBorrowersByPublicType": "Prestatarios por público",
+      "activeUsersByPublicType": "Usuarios con préstamos activos por público",
+      "activeUsersBySex": "Usuarios con préstamos activos por sexo",
+      "usersByPublicType": "Usuarios por público",
+      "usersBySex": "Usuarios por sexo"
+    },
     "timeRange": {
       "7d": "7 días",
       "30d": "30 días",
       "90d": "3 meses",
       "365d": "1 año"
     },
+    "year": "Año",
     "chart": {
       "loans": "Préstamos",
       "returns": "Devoluciones"
+    },
+    "annualForm": {
+      "title": "Formulario anual (secciones C, D, E, G, H)",
+      "subtitle": "Estadísticas normalizadas para el informe anual",
+      "year": "Año",
+      "generateButton": "Calcular estadísticas",
+      "downloadPdf": "Descargar en PDF",
+      "sectionDTitle": "Sección D – Colecciones",
+      "sectionETitle": "Sección E – Usos y usuarios de la biblioteca",
+      "collections": {
+        "printed": "D1 – Impresos",
+        "serials": "D2 – Publicaciones en serie",
+        "other": "D3 – Otros documentos",
+        "audiovisual": "D4 – Documentos audiovisuales y multimedia en soporte",
+        "fonds": "Fondo al 31/12",
+        "acquisitions": "Adquisiciones del año",
+        "eliminations": "Eliminaciones del año"
+      },
+      "audiences": {
+        "total": "Total",
+        "adult": "Adultos",
+        "children": "Infantil",
+        "unknown": "No especificado"
+      },
+      "users": {
+        "new": "Nuevos inscritos del año",
+        "active": "Prestatarios activos del año",
+        "groups": "Cuentas colectividades (E143, E144)"
+      },
+      "visitors": {
+        "title": "Frecuentación (E147)",
+        "total": "Total entradas"
+      },
+      "sectionHTitle": "Sección H – Acciones culturales y educación",
+      "sectionH": {
+        "schoolPartnerships": "Colaboraciones escolares",
+        "distinctClasses": "Clases distintas",
+        "totalVisits": "Visitas totales",
+        "totalStudents": "Alumnos total",
+        "animationsEvents": "Animaciones y actos",
+        "totalActions": "Número de acciones",
+        "totalAttendees": "Número de participantes"
+      },
+      "sectionCGTitle": "Secciones C y G – Medios y equipamiento",
+      "sectionCG": {
+        "weeklyHours": "Horas de apertura semanales",
+        "annualOpeningDays": "Días de apertura anuales",
+        "publicInternetStations": "Puestos internet públicos",
+        "publicTabletsEreaders": "Tabletas / e-readers en acceso público",
+        "personnelEtpt": "Personal (ETPT)"
+      },
+      "loans": {
+        "total": "Total de préstamos del año",
+        "adult": "Préstamos fondo adulto",
+        "children": "Préstamos fondo infantil"
+      },
+      "pdfTitle": "Formulario anual {{year}} – secciones C, D, E, G, H"
     }
   },
   "settings": {
@@ -283,13 +395,43 @@
     "z3950Servers": "Servidores Z39.50",
     "maxLoans": "Máx. préstamos",
     "maxRenewals": "Máx. renovaciones",
-    "durationDays": "Duración (días)"
+    "durationDays": "Duración (días)",
+    "sources": {
+      "title": "Gestión de fuentes",
+      "noSources": "No se encontraron fuentes",
+      "showArchived": "Mostrar archivadas",
+      "rename": "Renombrar",
+      "archive": "Archivar",
+      "merge": "Fusionar",
+      "mergeSelected": "Fusionar selección",
+      "mergeTitle": "Fusionar fuentes",
+      "mergeName": "Nombre de la nueva fuente",
+      "mergeNamePlaceholder": "Ingrese el nombre de la fuente fusionada",
+      "mergeHint": "Los ejemplares e ítems de las fuentes seleccionadas se reasignarán a la nueva fuente. Las fuentes antiguas se archivarán.",
+      "mergeMinTwo": "Seleccione al menos 2 fuentes para fusionar",
+      "mergeSuccess": "Fuentes fusionadas con éxito",
+      "renameTitle": "Renombrar fuente",
+      "newName": "Nuevo nombre",
+      "renameSuccess": "Fuente renombrada con éxito",
+      "archiveConfirm": "¿Está seguro de que desea archivar la fuente \"{{name}}\"?",
+      "archiveSuccess": "Fuente archivada con éxito",
+      "archived": "Archivada",
+      "active": "Activa",
+      "key": "Clave",
+      "selected": "{{count}} seleccionada(s)",
+      "errorLoad": "Error al cargar las fuentes",
+      "errorRename": "Error al renombrar",
+      "errorArchive": "Error al archivar",
+      "errorMerge": "Error al fusionar"
+    }
   },
   "z3950": {
     "title": "Búsqueda Z39.50",
     "subtitle": "Busque registros bibliográficos en servidores remotos e impórtelos a su catálogo",
     "searchCriteria": "Criterios de búsqueda",
     "server": "Servidor Z39.50",
+    "login": "Usuario",
+    "password": "Contraseña",
     "loadingServers": "Cargando servidores...",
     "noServers": "No hay servidor Z39.50 activo. Configure los servidores en la configuración.",
     "selectServer": "Por favor seleccione un servidor Z39.50",
@@ -312,7 +454,12 @@
     "specimensToCreate": "Ejemplares a crear (opcional)",
     "specimensHint": "Puede dejar estos campos vacíos para importar solo el registro bibliográfico",
     "importError": "Error al importar el documento",
-    "serverUnavailable": "Error en la búsqueda. El servidor puede no estar disponible."
+    "serverUnavailable": "Error en la búsqueda. El servidor puede no estar disponible.",
+    "maxResults": "Número máximo de resultados",
+    "isbnRequired": "Por favor ingrese un ISBN para realizar la búsqueda",
+    "dataFound": "¡Datos encontrados y campos rellenados!",
+    "searchError": "Error durante la búsqueda Z39.50",
+    "searchButton": "Buscar en Z39.50"
   },
   "importMarc": {
     "title": "Importar MARC",
@@ -374,7 +521,122 @@
     "network": "Error de red. Por favor verifique su conexión.",
     "unauthorized": "No está autorizado para realizar esta acción",
     "notFound": "Recurso no encontrado",
-    "serverError": "Error del servidor. Por favor intente más tarde."
+    "serverError": "Error del servidor. Por favor intente más tarde.",
+    "accessDenied": "Acceso denegado",
+    "accessDeniedHint": "No tiene permiso para acceder a esta página."
+  },
+  "codes": {
+    "publicType": {
+      "adult": "Adulto",
+      "children": "Niños",
+      "unknown": "No especificado"
+    },
+    "status": {
+      "borrowable": "Prestable",
+      "notBorrowable": "No prestable"
+    },
+    "occupation": {
+      "unknown": "No especificado",
+      "farm": "Agricultura",
+      "crafts": "Artesanía",
+      "frameworks": "Directivos",
+      "intermediate": "Profesiones intermedias",
+      "operative": "Empleados",
+      "workmen": "Obreros",
+      "reprocessed": "Jubilados",
+      "other": "Otro"
+    },
+    "lang": {
+      "unknown": "No especificado",
+      "fr": "Francés",
+      "en": "Inglés",
+      "de": "Alemán",
+      "jp": "Japonés",
+      "es": "Español",
+      "po": "Portugués"
+    },
+    "sex": {
+      "male": "Masculino",
+      "female": "Femenino",
+      "unknown": "No especificado"
+    },
+    "accountType": {
+      "unknown": "No especificado",
+      "guest": "Invitado",
+      "reader": "Lector",
+      "librarian": "Bibliotecario",
+      "admin": "Administrador",
+      "group": "Grupo"
+    },
+    "genre": {
+      "unknown": "No especificado",
+      "litteratureGeneral": "Generalidades",
+      "litteratureFiction": "Ficción",
+      "litteratureComic": "Cómic",
+      "litteratureTheatre": "Teatro",
+      "litteraturePoem": "Poesía",
+      "litteraturePhilosophy": "Filosofía",
+      "litteratureReligion": "Religión",
+      "litteratureSocialSciences": "Ciencias sociales",
+      "litteratureLanguages": "Idiomas",
+      "litteratureSciences": "Ciencias",
+      "litteratureTechnical": "Técnica",
+      "litteratureArt": "Arte",
+      "litteratureSport": "Deporte",
+      "litteratureLitterature": "Literatura",
+      "litteratureHistory": "Historia",
+      "litteratureGeography": "Geografía",
+      "litteratureOther": "Otro",
+      "audioUnknown": "Audio - No especificado",
+      "audioJazz": "Jazz",
+      "audioBlues": "Blues",
+      "audioRock": "Rock",
+      "audioWorld": "Música del mundo",
+      "audioClassical": "Clásica",
+      "videoUnknown": "Video - No especificado",
+      "videoFiction": "Video - Ficción",
+      "videoHistory": "Video - Historia",
+      "videoArt": "Video - Arte",
+      "videoDocumentary": "Video - Documental",
+      "videoMusical": "Video - Musical"
+    },
+    "function": {
+      "unknown": "No especificado",
+      "actor": "Actor",
+      "adapter": "Adaptador",
+      "annotator": "Anotador",
+      "arranger": "Arreglista",
+      "artist": "Artista",
+      "author": "Autor",
+      "authorIntroduction": "Autor de la introducción",
+      "cartographer": "Cartógrafo",
+      "choreographer": "Coreógrafo",
+      "collaborator": "Colaborador",
+      "commentator": "Comentarista",
+      "compiler": "Compilador",
+      "composer": "Compositor",
+      "conceptor": "Conceptor",
+      "conductor": "Director de orquesta",
+      "corrector": "Corrector",
+      "director": "Director",
+      "editor": "Editor",
+      "filmEditor": "Editor de cine",
+      "illustrator": "Ilustrador",
+      "interviewee": "Entrevistado",
+      "interviewer": "Entrevistador",
+      "librettist": "Libretista",
+      "lyricist": "Letrista",
+      "musician": "Músico",
+      "narrator": "Narrador",
+      "other": "Otro",
+      "performer": "Intérprete",
+      "photographer": "Fotógrafo",
+      "producer": "Productor",
+      "publisher": "Editor",
+      "scenarist": "Guionista",
+      "singer": "Cantante",
+      "translator": "Traductor"
+    }
   },
   "footer": {
     "copyright": "© 2026 Elidune - Sistema de gestión de bibliotecas"

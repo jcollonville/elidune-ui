@@ -106,8 +106,8 @@
     "loginUsername": "Benutzername",
     "loginHint": "Mindestens 3 Zeichen",
     "birthdate": "Geburtsdatum",
-    "occupation": "Beruf (ID)",
-    "occupationHint": "Berufskennung",
+    "occupation": "Beruf",
+    "occupationHint": "Berufskategorie",
     "address": "Adresse",
     "street": "Straße",
     "zipCode": "Postleitzahl",
@@ -155,7 +155,25 @@
     "reader": "Leser",
     "librarian": "Bibliothekar",
     "administrator": "Administrator",
-    "guest": "Gast"
+    "guest": "Gast",
+    "information": "Informationen",
+    "createdAt": "Erstellt am",
+    "loanStatistics": "Ausleihstatistiken",
+    "totalLoansAllTime": "{{count}} Ausleihe(n) insgesamt",
+    "totalLoansLabel": "Gesamte Ausleihen",
+    "returnsLastYear": "Rückgaben (12 Monate)",
+    "loansLastYear": "Ausleihen (12 Monate)",
+    "returnsInPeriod": "Rückgaben (Zeitraum)",
+    "loansInPeriod": "Ausleihen (Zeitraum)",
+    "noStatsAvailable": "Keine Statistiken verfügbar",
+    "identity": "Identität",
+    "contact": "Kontakt",
+    "additionalInfo": "Zusätzliche Informationen",
+    "notes": "Notizen",
+    "fee": "Gebühr",
+    "groupId": "Gruppe (ID)",
+    "publicType": "Öffentlicher Typ",
+    "statusField": "Status"
   },
   "items": {
     "title": "Katalog",
@@ -180,9 +198,10 @@
     "keywords": "Schlagwörter",
     "keywordsHint": "Durch Kommas getrennt",
     "subject": "Thema",
+    "language": "Sprache",
     "mediaTypeLabel": "Dokumenttyp",
     "mediaType": {
-      "unknown": "Unbekannt",
+      "unknown": "Nicht angegeben",
       "printedText": "Gedruckter Text",
       "comics": "Comic",
       "periodic": "Periodikum",
@@ -247,6 +266,7 @@
   "stats": {
     "title": "Statistiken",
     "subtitle": "Bibliotheksübersicht",
+    "loadError": "Statistiken konnten nicht geladen werden. Überprüfen Sie Ihre Verbindung oder Zugriffsrechte.",
     "documents": "Dokumente",
     "activeUsers": "Aktive Benutzer",
     "totalUsers": "{{count}} gesamt",
@@ -265,15 +285,107 @@
     "totalLoans": "Gesamtausleihen",
     "activeLoansSort": "Aktive Ausleihen",
     "overdueLoansSort": "Überfällig",
+    "catalogSection": {
+      "title": "Katalogstatistiken",
+      "subtitle": "Aktive, eingetragene und archivierte Exemplare",
+      "breakdowns": "Aufschlüsselungen",
+      "bySource": "Nach Quelle",
+      "byMediaType": "Nach Medientyp",
+      "byPublicType": "Nach Zielgruppe",
+      "activeSpecimens": "Aktive Exemplare",
+      "enteredSpecimens": "Eingetragene Exemplare",
+      "archivedSpecimens": "Archivierte Exemplare",
+      "active": "Aktiv",
+      "entered": "Eingetragen",
+      "archived": "Archiviert",
+      "loans": "Ausleihen"
+    },
+    "usersSection": {
+      "title": "Benutzerstatistiken",
+      "aggregateSubtitle": "Neuanmeldungen und aktive Ausleiher nach Jahr",
+      "mode": "Modus",
+      "modeLeaderboard": "Rangliste",
+      "modeAggregate": "Aggregat",
+      "limit": "Limit",
+      "allYears": "Alle Jahre",
+      "newUsersTotal": "Neue Benutzer",
+      "activeBorrowersTotal": "Ausleiher",
+      "activeUsersTotal": "Benutzer mit aktiven Ausleihen",
+      "usersTotal": "Gesamt Benutzer",
+      "newUsersByPublicType": "Neue Benutzer nach Zielgruppe",
+      "activeBorrowersByPublicType": "Ausleiher nach Zielgruppe",
+      "activeUsersByPublicType": "Benutzer mit aktiven Ausleihen nach Zielgruppe",
+      "activeUsersBySex": "Benutzer mit aktiven Ausleihen nach Geschlecht",
+      "usersByPublicType": "Benutzer nach Zielgruppe",
+      "usersBySex": "Benutzer nach Geschlecht"
+    },
     "timeRange": {
       "7d": "7 Tage",
       "30d": "30 Tage",
       "90d": "3 Monate",
       "365d": "1 Jahr"
     },
+    "year": "Jahr",
     "chart": {
       "loans": "Ausleihen",
       "returns": "Rückgaben"
+    },
+    "annualForm": {
+      "title": "Jahresformular (Abschnitte C, D, E, G, H)",
+      "subtitle": "Standardisierte Statistiken für den Jahresbericht",
+      "year": "Jahr",
+      "generateButton": "Statistiken berechnen",
+      "downloadPdf": "Als PDF herunterladen",
+      "sectionDTitle": "Abschnitt D – Sammlungen",
+      "sectionETitle": "Abschnitt E – Nutzung der Bibliothek und Benutzer",
+      "collections": {
+        "printed": "D1 – Druckwerke",
+        "serials": "D2 – Laufende Veröffentlichungen",
+        "other": "D3 – Andere Dokumente",
+        "audiovisual": "D4 – Audiovisuelle und multimediale Dokumente auf Träger",
+        "fonds": "Bestand am 31.12.",
+        "acquisitions": "Zugänge im Jahr",
+        "eliminations": "Abgänge im Jahr"
+      },
+      "audiences": {
+        "total": "Gesamt",
+        "adult": "Erwachsene",
+        "children": "Kinder",
+        "unknown": "Nicht angegeben"
+      },
+      "users": {
+        "new": "Neu angemeldete Benutzer im Jahr",
+        "active": "Aktive Entleiher im Jahr",
+        "groups": "Gruppenkonten / Collectivités (E143, E144)"
+      },
+      "visitors": {
+        "title": "Besucher / Frequenz (E147)",
+        "total": "Gesamteintritte"
+      },
+      "sectionHTitle": "Abschnitt H – Kulturelle Aktionen und Bildung",
+      "sectionH": {
+        "schoolPartnerships": "Schulpartnerschaften",
+        "distinctClasses": "Verschiedene Klassen",
+        "totalVisits": "Besuche gesamt",
+        "totalStudents": "Schüler gesamt",
+        "animationsEvents": "Animationen und Veranstaltungen",
+        "totalActions": "Anzahl Aktionen",
+        "totalAttendees": "Anzahl Teilnehmer"
+      },
+      "sectionCGTitle": "Abschnitte C & G – Mittel und Ausstattung",
+      "sectionCG": {
+        "weeklyHours": "Wöchentliche Öffnungsstunden",
+        "annualOpeningDays": "Öffnungstage pro Jahr",
+        "publicInternetStations": "Öffentliche Internetarbeitsplätze",
+        "publicTabletsEreaders": "Tablets / E-Reader öffentlich",
+        "personnelEtpt": "Personal (ETPT)"
+      },
+      "loans": {
+        "total": "Gesamtzahl der Ausleihen im Jahr",
+        "adult": "Ausleihen Erwachsenenbestand",
+        "children": "Ausleihen Kinderbestand"
+      },
+      "pdfTitle": "Jahresformular {{year}} – Abschnitte C, D, E, G, H"
     }
   },
   "settings": {
@@ -283,13 +395,43 @@
     "z3950Servers": "Z39.50 Server",
     "maxLoans": "Max. Ausleihen",
     "maxRenewals": "Max. Verlängerungen",
-    "durationDays": "Dauer (Tage)"
+    "durationDays": "Dauer (Tage)",
+    "sources": {
+      "title": "Quellenverwaltung",
+      "noSources": "Keine Quellen gefunden",
+      "showArchived": "Archivierte anzeigen",
+      "rename": "Umbenennen",
+      "archive": "Archivieren",
+      "merge": "Zusammenführen",
+      "mergeSelected": "Auswahl zusammenführen",
+      "mergeTitle": "Quellen zusammenführen",
+      "mergeName": "Name der neuen Quelle",
+      "mergeNamePlaceholder": "Name der zusammengeführten Quelle eingeben",
+      "mergeHint": "Exemplare und Einträge der ausgewählten Quellen werden der neuen Quelle zugeordnet. Alte Quellen werden archiviert.",
+      "mergeMinTwo": "Wählen Sie mindestens 2 Quellen zum Zusammenführen",
+      "mergeSuccess": "Quellen erfolgreich zusammengeführt",
+      "renameTitle": "Quelle umbenennen",
+      "newName": "Neuer Name",
+      "renameSuccess": "Quelle erfolgreich umbenannt",
+      "archiveConfirm": "Möchten Sie die Quelle \"{{name}}\" wirklich archivieren?",
+      "archiveSuccess": "Quelle erfolgreich archiviert",
+      "archived": "Archiviert",
+      "active": "Aktiv",
+      "key": "Schlüssel",
+      "selected": "{{count}} ausgewählt",
+      "errorLoad": "Fehler beim Laden der Quellen",
+      "errorRename": "Fehler beim Umbenennen",
+      "errorArchive": "Fehler beim Archivieren",
+      "errorMerge": "Fehler beim Zusammenführen"
+    }
   },
   "z3950": {
     "title": "Z39.50 Suche",
     "subtitle": "Suchen Sie bibliographische Datensätze auf entfernten Servern und importieren Sie sie in Ihren Katalog",
     "searchCriteria": "Suchkriterien",
     "server": "Z39.50 Server",
+    "login": "Benutzername",
+    "password": "Passwort",
     "loadingServers": "Server werden geladen...",
     "noServers": "Kein aktiver Z39.50 Server. Konfigurieren Sie Server in den Einstellungen.",
     "selectServer": "Bitte wählen Sie einen Z39.50 Server",
@@ -312,7 +454,12 @@
     "specimensToCreate": "Zu erstellende Exemplare (optional)",
     "specimensHint": "Sie können diese Felder leer lassen, um nur den bibliographischen Datensatz zu importieren",
     "importError": "Fehler beim Importieren des Dokuments",
-    "serverUnavailable": "Fehler bei der Suche. Der Server ist möglicherweise nicht verfügbar."
+    "serverUnavailable": "Fehler bei der Suche. Der Server ist möglicherweise nicht verfügbar.",
+    "maxResults": "Maximale Anzahl der Ergebnisse",
+    "isbnRequired": "Bitte geben Sie eine ISBN ein, um die Suche durchzuführen",
+    "dataFound": "Daten gefunden und Felder ausgefüllt!",
+    "searchError": "Fehler bei der Z39.50-Suche",
+    "searchButton": "In Z39.50 suchen"
   },
   "importMarc": {
     "title": "MARC Import",
@@ -374,7 +521,122 @@
     "network": "Netzwerkfehler. Bitte überprüfen Sie Ihre Verbindung.",
     "unauthorized": "Sie sind nicht berechtigt, diese Aktion auszuführen",
     "notFound": "Ressource nicht gefunden",
-    "serverError": "Serverfehler. Bitte versuchen Sie es später erneut."
+    "serverError": "Serverfehler. Bitte versuchen Sie es später erneut.",
+    "accessDenied": "Zugriff verweigert",
+    "accessDeniedHint": "Sie haben keine Berechtigung für diese Seite."
+  },
+  "codes": {
+    "publicType": {
+      "adult": "Erwachsene",
+      "children": "Kinder",
+      "unknown": "Nicht angegeben"
+    },
+    "status": {
+      "borrowable": "Ausleihbar",
+      "notBorrowable": "Nicht ausleihbar"
+    },
+    "occupation": {
+      "unknown": "Nicht angegeben",
+      "farm": "Landwirtschaft",
+      "crafts": "Handwerk",
+      "frameworks": "Führungskräfte",
+      "intermediate": "Mittlere Berufe",
+      "operative": "Angestellte",
+      "workmen": "Arbeiter",
+      "reprocessed": "Rentner",
+      "other": "Sonstige"
+    },
+    "lang": {
+      "unknown": "Nicht angegeben",
+      "fr": "Französisch",
+      "en": "Englisch",
+      "de": "Deutsch",
+      "jp": "Japanisch",
+      "es": "Spanisch",
+      "po": "Portugiesisch"
+    },
+    "sex": {
+      "male": "Männlich",
+      "female": "Weiblich",
+      "unknown": "Nicht angegeben"
+    },
+    "accountType": {
+      "unknown": "Nicht angegeben",
+      "guest": "Gast",
+      "reader": "Leser",
+      "librarian": "Bibliothekar",
+      "admin": "Administrator",
+      "group": "Gruppe"
+    },
+    "genre": {
+      "unknown": "Nicht angegeben",
+      "litteratureGeneral": "Allgemeines",
+      "litteratureFiction": "Fiktion",
+      "litteratureComic": "Comic",
+      "litteratureTheatre": "Theater",
+      "litteraturePoem": "Poesie",
+      "litteraturePhilosophy": "Philosophie",
+      "litteratureReligion": "Religion",
+      "litteratureSocialSciences": "Sozialwissenschaften",
+      "litteratureLanguages": "Sprachen",
+      "litteratureSciences": "Wissenschaften",
+      "litteratureTechnical": "Technik",
+      "litteratureArt": "Kunst",
+      "litteratureSport": "Sport",
+      "litteratureLitterature": "Literatur",
+      "litteratureHistory": "Geschichte",
+      "litteratureGeography": "Geographie",
+      "litteratureOther": "Sonstiges",
+      "audioUnknown": "Audio - Nicht angegeben",
+      "audioJazz": "Jazz",
+      "audioBlues": "Blues",
+      "audioRock": "Rock",
+      "audioWorld": "Weltmusik",
+      "audioClassical": "Klassik",
+      "videoUnknown": "Video - Nicht angegeben",
+      "videoFiction": "Video - Fiktion",
+      "videoHistory": "Video - Geschichte",
+      "videoArt": "Video - Kunst",
+      "videoDocumentary": "Video - Dokumentation",
+      "videoMusical": "Video - Musical"
+    },
+    "function": {
+      "unknown": "Nicht angegeben",
+      "actor": "Schauspieler",
+      "adapter": "Bearbeiter",
+      "annotator": "Kommentator",
+      "arranger": "Arrangeur",
+      "artist": "Künstler",
+      "author": "Autor",
+      "authorIntroduction": "Verfasser der Einleitung",
+      "cartographer": "Kartograph",
+      "choreographer": "Choreograph",
+      "collaborator": "Mitarbeiter",
+      "commentator": "Kommentator",
+      "compiler": "Zusammensteller",
+      "composer": "Komponist",
+      "conceptor": "Konzeptentwickler",
+      "conductor": "Dirigent",
+      "corrector": "Korrektor",
+      "director": "Regisseur",
+      "editor": "Herausgeber",
+      "filmEditor": "Cutter",
+      "illustrator": "Illustrator",
+      "interviewee": "Interviewter",
+      "interviewer": "Interviewer",
+      "librettist": "Librettist",
+      "lyricist": "Texter",
+      "musician": "Musiker",
+      "narrator": "Erzähler",
+      "other": "Sonstiges",
+      "performer": "Interpret",
+      "photographer": "Fotograf",
+      "producer": "Produzent",
+      "publisher": "Verleger",
+      "scenarist": "Drehbuchautor",
+      "singer": "Sänger",
+      "translator": "Übersetzer"
+    }
   },
   "footer": {
     "copyright": "© 2026 Elidune - Bibliotheksverwaltungssystem"
