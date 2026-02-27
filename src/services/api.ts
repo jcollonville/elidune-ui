@@ -25,6 +25,8 @@ import type {
   CatalogStats,
   Source,
   Specimen,
+  CreateSpecimen,
+  UpdateSpecimen,
 } from '@/types';
 
 const API_BASE_URL = '/api/v1';
@@ -162,13 +164,14 @@ class ApiService {
     freesearch?: string;
     page?: number;
     per_page?: number;
+    archive?: boolean;
   }): Promise<PaginatedResponse<ItemShort>> {
     const response = await this.client.get<PaginatedResponse<ItemShort>>('/items', { params });
     return response.data;
   }
 
-  async getItem(id: number): Promise<Item> {
-    const response = await this.client.get<Item>(`/items/${id}`);
+  async getItem(id: number, params?: { full_record?: boolean }): Promise<Item> {
+    const response = await this.client.get<Item>(`/items/${id}`, { params });
     return response.data;
   }
 
@@ -187,16 +190,16 @@ class ApiService {
     await this.client.delete(`/items/${id}`, { params: { force } });
   }
 
-  async updateSpecimen(itemId: number, specimenId: number, data: Partial<Specimen>): Promise<Specimen> {
+  async updateSpecimen(itemId: number, specimenId: number, data: UpdateSpecimen): Promise<Specimen> {
     const response = await this.client.put<Specimen>(`/items/${itemId}/specimens/${specimenId}`, data);
     return response.data;
   }
 
-  async deleteSpecimen(itemId: number, specimenId: number): Promise<void> {
-    await this.client.delete(`/items/${itemId}/specimens/${specimenId}`);
+  async deleteSpecimen(itemId: number, specimenId: number, force = false): Promise<void> {
+    await this.client.delete(`/items/${itemId}/specimens/${specimenId}`, { params: { force } });
   }
 
-  async createSpecimen(itemId: number, data: { barcode?: string; call_number?: string; source_id?: number }): Promise<Specimen> {
+  async createSpecimen(itemId: number, data: CreateSpecimen): Promise<Specimen> {
     const response = await this.client.post<Specimen>(`/items/${itemId}/specimens`, data);
     return response.data;
   }

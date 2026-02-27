@@ -13,6 +13,7 @@ import {
   FileText,
   Tag,
   Plus,
+  Minus,
 } from 'lucide-react';
 import { Card, CardHeader, Button, Badge, Modal, Input } from '@/components/common';
 import CallNumberField from '@/components/specimen/CallNumberField';
@@ -22,7 +23,7 @@ import { canManageItems, type MediaType } from '@/types';
 import api from '@/services/api';
 import type { Item, Specimen, Author } from '@/types';
 import { useTranslation } from 'react-i18next';
-import { LANG_OPTIONS, FUNCTION_OPTIONS, PUBLIC_TYPE_OPTIONS, getCodeLabel } from '@/utils/codeLabels';
+import { LANG_OPTIONS, FUNCTION_OPTIONS, PUBLIC_TYPE_OPTIONS, STATUS_OPTIONS, getCodeLabel } from '@/utils/codeLabels';
 import type { MediaTypeOption } from '@/types';
 
 // Helper function to get translation key for media type
@@ -56,7 +57,7 @@ function getSuggestedCallNumberFromItem(item: Item): string {
     item.publication_date?.trim().slice(0, 4) ||
     item.edition?.date?.trim().slice(0, 4) ||
     undefined;
-  const authorName = item.authors1?.[0]?.lastname?.trim();
+  const authorName = item.authors?.[0]?.lastname?.trim();
   return buildSuggestedCallNumber({
     categoryCode: categoryCode || 'GEN',
     year: year ? parseInt(year, 10) : undefined,
@@ -97,7 +98,7 @@ export default function ItemDetailPage() {
   }, [id, navigate]);
 
   const handleDelete = async () => {
-    if (!item) return;
+    if (!item || item.id == null) return;
     try {
       await api.deleteItem(item.id);
       navigate('/items');
@@ -149,21 +150,18 @@ export default function ItemDetailPage() {
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-              {item.title1 || 'Sans titre'}
+              {item.title || 'Sans titre'}
             </h1>
-            {item.title2 && (
-              <p className="text-gray-600 dark:text-gray-400">{item.title2}</p>
-            )}
             <div className="flex items-center gap-2 mt-2">
               <Badge>
                 {item.media_type 
-                  ? t(`items.mediaType.${getMediaTypeTranslationKey(item.media_type)}`)
+                  ? t(`items.mediaType.${getMediaTypeTranslationKey(item.media_type as MediaType)}`)
                   : t('items.document')
                 }
               </Badge>
-              {item.public_type && (
+              {item.audience_type != null && (
                 <Badge variant="secondary">
-                  {getCodeLabel(t, PUBLIC_TYPE_OPTIONS, item.public_type)}
+                  {getCodeLabel(t, PUBLIC_TYPE_OPTIONS, item.audience_type)}
                 </Badge>
               )}
               {item.is_valid === 0 && <Badge variant="warning">Non validé</Badge>}
@@ -190,27 +188,24 @@ export default function ItemDetailPage() {
             <CardHeader title={t('items.generalInfo')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <InfoRow icon={Hash} label={t('items.isbn')} value={item.isbn} />
-              <InfoRow icon={User} label={t('items.mainAuthor')} value={formatAuthors(item.authors1)} />
-              <InfoRow icon={User} label={t('items.secondaryAuthor')} value={formatAuthors(item.authors2)} />
+              <InfoRow icon={User} label={t('items.mainAuthor')} value={item.authors?.length ? formatAuthors([item.authors[0]]) : undefined} />
+              <InfoRow icon={User} label={t('items.secondaryAuthor')} value={item.authors && item.authors.length > 1 ? formatAuthors(item.authors.slice(1)) : undefined} />
               <InfoRow icon={Calendar} label={t('items.publicationDate')} value={item.publication_date} />
-              <InfoRow icon={Building} label={t('items.publisher')} value={item.edition?.name} />
-              <InfoRow icon={MapPin} label={t('items.publicationPlace')} value={item.edition?.place} />
-              {item.title3 && (
-                <InfoRow icon={FileText} label={t('items.title3')} value={item.title3} />
-              )}
+              <InfoRow icon={Building} label={t('items.publisher')} value={item.edition?.publisher_name} />
+              <InfoRow icon={MapPin} label={t('items.publicationPlace')} value={item.edition?.place_of_publication} />
               {item.lang !== undefined && item.lang !== null && (
                 <InfoRow icon={BookOpen} label={t('items.language')} value={getCodeLabel(t, LANG_OPTIONS, item.lang)} />
               )}
-              {item.public_type && (
-                <InfoRow icon={Tag} label={t('items.publicType')} value={getCodeLabel(t, PUBLIC_TYPE_OPTIONS, item.public_type)} />
+              {item.audience_type != null && (
+                <InfoRow icon={Tag} label={t('items.publicType')} value={getCodeLabel(t, PUBLIC_TYPE_OPTIONS, item.audience_type)} />
               )}
-              {item.nb_specimens !== undefined && (
+              {item.specimens != null && (
                 <InfoRow 
                   icon={Plus} 
                   label={t('items.specimens')} 
-                  value={item.nb_borrowed_specimens !== undefined && item.nb_specimens !== undefined
-                    ? `${item.nb_borrowed_specimens}/${item.nb_specimens}`
-                    : item.nb_specimens?.toString()
+                  value={item.specimens.length > 0
+                    ? `${item.specimens.filter(s => s.availability === 0).length}/${item.specimens.length}`
+                    : '0'
                   } 
                 />
               )}
@@ -252,7 +247,7 @@ export default function ItemDetailPage() {
           <Card>
             <CardHeader
               title={t('items.specimens')}
-              subtitle={t('items.specimenCount', { count: item.specimens?.length || 0 })}
+              subtitle={t('items.specimenCount', { count: item.specimens?.length ?? 0 })}
               action={
                 canManageItems(user?.account_type) && (
                   <Button
@@ -293,9 +288,9 @@ export default function ItemDetailPage() {
 
           {item.collection && (
             <Card>
-              <CardHeader title="Collection" />
+              <CardHeader title={t('items.collection')} />
               <p className="font-medium text-gray-900 dark:text-white">
-                {item.collection.title1}
+                {item.collection.primary_title || item.collection.secondary_title || item.collection.tertiary_title || '—'}
               </p>
               {item.collection.issn && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -305,15 +300,15 @@ export default function ItemDetailPage() {
             </Card>
           )}
 
-          {item.serie && (
+          {(item.series || item.series_volume_number != null) && (
             <Card>
-              <CardHeader title="Série" />
+              <CardHeader title={t('items.series')} />
               <p className="font-medium text-gray-900 dark:text-white">
-                {item.serie.name}
+                {item.series?.name ?? '—'}
               </p>
-              {item.serie.volume_number && (
+              {(item.series_volume_number != null || item.series?.name) && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Volume {item.serie.volume_number}
+                  {item.series_volume_number != null ? `Volume ${item.series_volume_number}` : null}
                 </p>
               )}
             </Card>
@@ -329,7 +324,7 @@ export default function ItemDetailPage() {
         size="sm"
       >
         <p className="text-gray-600 dark:text-gray-300 mb-6">
-          Êtes-vous sûr de vouloir supprimer "{item.title1}" ? Cette action est irréversible.
+          Êtes-vous sûr de vouloir supprimer "{item.title}" ? Cette action est irréversible.
         </p>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
@@ -424,12 +419,11 @@ export default function ItemDetailPage() {
               <Button
                 variant="danger"
                 onClick={async () => {
-                  if (!selectedSpecimen) return;
+                  if (!selectedSpecimen || item.id == null) return;
                   try {
                     await api.deleteSpecimen(item.id, selectedSpecimen.id);
                     setShowDeleteSpecimenModal(false);
                     setSelectedSpecimen(null);
-                    // Refresh item data
                     api.getItem(item.id).then(setItem);
                   } catch (error) {
                     console.error('Error deleting specimen:', error);
@@ -473,7 +467,12 @@ interface SpecimenCardProps {
 
 function SpecimenCard({ specimen, canManage, onEdit, onDelete }: SpecimenCardProps) {
   const { t } = useTranslation();
-  
+
+  const borrowStatusLabel =
+    specimen.borrow_status != null
+      ? STATUS_OPTIONS.find((o) => o.value === String(specimen.borrow_status))?.labelKey
+      : null;
+
   const getAvailabilityBadge = (availability?: number) => {
     if (availability === 0) return <Badge variant="success">{t('items.available')}</Badge>;
     if (availability === 1) return <Badge variant="warning">{t('items.borrowed')}</Badge>;
@@ -511,6 +510,12 @@ function SpecimenCard({ specimen, canManage, onEdit, onDelete }: SpecimenCardPro
       {specimen.call_number && (
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('items.callNumber')}: {specimen.call_number}</p>
       )}
+      {specimen.volume_designation && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('items.volumeDesignation')}: {specimen.volume_designation}</p>
+      )}
+      {borrowStatusLabel != null && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('items.borrowStatus')}: {t(borrowStatusLabel)}</p>
+      )}
       {specimen.source_name && (
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('items.source')}: {specimen.source_name}</p>
       )}
@@ -523,22 +528,38 @@ interface EditItemFormProps {
   onSuccess: (item: Item) => void;
 }
 
+type AuthorForm = { id: number; lastname: string; firstname: string; function: string };
+
 function EditItemForm({ item, onSuccess }: EditItemFormProps) {
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const toAuthorForm = (a: Author): AuthorForm => ({
+    id: a.id,
+    lastname: a.lastname ?? '',
+    firstname: a.firstname ?? '',
+    function: a.function ?? '',
+  });
+  const allAuthors = item.authors ?? [];
   const [formData, setFormData] = useState({
-    title1: item.title1 || '',
-    title2: item.title2 || '',
-    title3: item.title3 || '',
+    title: item.title || '',
     isbn: item.isbn || '',
     publication_date: item.publication_date || '',
     abstract_: item.abstract_ || '',
     keywords: item.keywords || '',
     subject: item.subject || '',
-    media_type: item.media_type || 'b' as MediaType,
-    public_type: item.public_type?.toString() || '',
-    lang: item.lang?.toString() || '',
+    media_type: (item.media_type || 'b') as MediaType,
+    audience_type: item.audience_type?.toString() ?? '',
+    lang: item.lang?.toString() ?? '',
+    edition_publisher: item.edition?.publisher_name ?? '',
+    edition_place: item.edition?.place_of_publication ?? '',
+    edition_date: item.edition?.date ?? '',
+    authors: allAuthors.map(toAuthorForm),
+    collection_id: item.collection?.id?.toString() ?? '',
+    collection_primary_title: item.collection?.primary_title ?? '',
+    series_id: item.series?.id?.toString() ?? '',
+    series_name: item.series?.name ?? '',
+    series_volume: item.series_volume_number?.toString() ?? '',
   });
 
   const MEDIA_TYPES: MediaTypeOption[] = [
@@ -559,22 +580,56 @@ function EditItemForm({ item, onSuccess }: EditItemFormProps) {
     { value: 'm', label: t('items.mediaType.multimedia') },
   ];
 
+  const updateAuthor = (index: number, field: keyof AuthorForm, value: string) => {
+    const arr = [...formData.authors];
+    arr[index] = { ...arr[index], [field]: value };
+    setFormData({ ...formData, authors: arr });
+  };
+  const addAuthor = () => {
+    setFormData({
+      ...formData,
+      authors: [...formData.authors, { id: 0, lastname: '', firstname: '', function: '' }],
+    });
+  };
+  const removeAuthor = (index: number) => {
+    setFormData({ ...formData, authors: formData.authors.filter((_, i) => i !== index) });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (item.id == null) return;
     setIsLoading(true);
     try {
+      const authorsPayload: Author[] = formData.authors.map((a) => ({
+        id: a.id,
+        lastname: a.lastname || undefined,
+        firstname: a.firstname || undefined,
+        function: a.function || undefined,
+      }));
       const updateData: Partial<Item> = {
-        title1: formData.title1,
-        title2: formData.title2,
-        title3: formData.title3,
-        isbn: formData.isbn,
-        publication_date: formData.publication_date,
-        abstract_: formData.abstract_,
-        keywords: formData.keywords,
-        subject: formData.subject,
-        media_type: formData.media_type as MediaType,
-        public_type: formData.public_type ? parseInt(formData.public_type) : undefined,
-        lang: formData.lang ? parseInt(formData.lang) : undefined,
+        title: formData.title || undefined,
+        isbn: formData.isbn || undefined,
+        publication_date: formData.publication_date || undefined,
+        abstract_: formData.abstract_ || undefined,
+        keywords: formData.keywords || undefined,
+        subject: formData.subject || undefined,
+        media_type: formData.media_type,
+        audience_type: formData.audience_type ? parseInt(formData.audience_type, 10) : undefined,
+        lang: formData.lang ? parseInt(formData.lang, 10) : undefined,
+        edition: {
+          id: item.edition?.id ?? null,
+          publisher_name: formData.edition_publisher || undefined,
+          place_of_publication: formData.edition_place || undefined,
+          date: formData.edition_date || undefined,
+        },
+        authors: authorsPayload,
+        collection: formData.collection_id
+          ? { id: parseInt(formData.collection_id, 10), primary_title: formData.collection_primary_title || undefined }
+          : undefined,
+        series: formData.series_name || formData.series_volume
+          ? { id: formData.series_id ? parseInt(formData.series_id, 10) : null, name: formData.series_name || undefined }
+          : undefined,
+        series_volume_number: formData.series_volume ? parseInt(formData.series_volume, 10) : undefined,
       };
       const updated = await api.updateItem(item.id, updateData);
       onSuccess(updated);
@@ -585,18 +640,60 @@ function EditItemForm({ item, onSuccess }: EditItemFormProps) {
     }
   };
 
+  const renderAuthorRows = () => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('items.authors')}</span>
+        <Button type="button" size="sm" variant="ghost" onClick={addAuthor} leftIcon={<Plus className="h-3 w-3" />}>
+          {t('common.add')}
+        </Button>
+      </div>
+      {formData.authors.map((author, index) => (
+        <div key={index} className="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+          <Input
+            placeholder={t('items.authorLastname')}
+            value={author.lastname}
+            onChange={(e) => updateAuthor(index, 'lastname', e.target.value)}
+            className="flex-1 min-w-[100px]"
+          />
+          <Input
+            placeholder={t('items.authorFirstname')}
+            value={author.firstname}
+            onChange={(e) => updateAuthor(index, 'firstname', e.target.value)}
+            className="flex-1 min-w-[100px]"
+          />
+          <select
+            value={author.function}
+            onChange={(e) => updateAuthor(index, 'function', e.target.value)}
+            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm min-w-[120px]"
+          >
+            <option value="">{t('items.notSpecified')}</option>
+            {FUNCTION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {t(opt.labelKey)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => removeAuthor(index)}
+            className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500"
+            title={t('common.delete')}
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input
         label={t('items.titleField')}
-        value={formData.title1}
-        onChange={(e) => setFormData({ ...formData, title1: e.target.value })}
+        value={formData.title}
+        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
         required
-      />
-      <Input
-        label={t('items.subtitle')}
-        value={formData.title2}
-        onChange={(e) => setFormData({ ...formData, title2: e.target.value })}
       />
       <div className="grid grid-cols-2 gap-4">
         <Input
@@ -632,8 +729,8 @@ function EditItemForm({ item, onSuccess }: EditItemFormProps) {
             {t('items.publicType')}
           </label>
           <select
-            value={formData.public_type}
-            onChange={(e) => setFormData({ ...formData, public_type: e.target.value })}
+            value={formData.audience_type}
+            onChange={(e) => setFormData({ ...formData, audience_type: e.target.value })}
             className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
           >
             <option value="">{t('items.notSpecified')}</option>
@@ -662,14 +759,68 @@ function EditItemForm({ item, onSuccess }: EditItemFormProps) {
         onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
         placeholder={t('items.keywordsHint')}
       />
-      
+
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+        >
+          {showAdvanced ? t('common.hide') : t('items.advancedBibliographic')}
+        </button>
+      </div>
+
       {showAdvanced && (
-        <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Input
-            label={t('items.title3')}
-            value={formData.title3}
-            onChange={(e) => setFormData({ ...formData, title3: e.target.value })}
-          />
+        <div className="space-y-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4 bg-gray-50/50 dark:bg-gray-800/30">
+            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200">{t('items.editionInfo')}</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Input
+                label={t('items.publisher')}
+                value={formData.edition_publisher}
+                onChange={(e) => setFormData({ ...formData, edition_publisher: e.target.value })}
+              />
+              <Input
+                label={t('items.publicationPlace')}
+                value={formData.edition_place}
+                onChange={(e) => setFormData({ ...formData, edition_place: e.target.value })}
+              />
+              <Input
+                label={t('items.editionDate')}
+                value={formData.edition_date}
+                onChange={(e) => setFormData({ ...formData, edition_date: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {renderAuthorRows()}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label={t('items.collectionId')}
+              value={formData.collection_id}
+              onChange={(e) => setFormData({ ...formData, collection_id: e.target.value })}
+              placeholder="ID"
+            />
+            <Input
+              label={t('items.collectionPrimaryTitle')}
+              value={formData.collection_primary_title}
+              onChange={(e) => setFormData({ ...formData, collection_primary_title: e.target.value })}
+              placeholder={t('items.seriesName')}
+            />
+            <Input
+              label={t('items.series')}
+              value={formData.series_name}
+              onChange={(e) => setFormData({ ...formData, series_name: e.target.value })}
+              placeholder={t('items.seriesName')}
+            />
+            <Input
+              label={t('items.serieVolume')}
+              value={formData.series_volume}
+              onChange={(e) => setFormData({ ...formData, series_volume: e.target.value })}
+              placeholder="n°"
+            />
+          </div>
           <Input
             label={t('items.subject')}
             value={formData.subject}
@@ -695,19 +846,10 @@ function EditItemForm({ item, onSuccess }: EditItemFormProps) {
         </div>
       )}
 
-      <div className="flex justify-between items-center pt-4">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? t('common.hide') : t('common.advanced')}
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="submit" isLoading={isLoading}>
+          {t('common.save')}
         </Button>
-        <div className="flex gap-2">
-          <Button type="submit" isLoading={isLoading}>
-            {t('common.save')}
-          </Button>
-        </div>
       </div>
     </form>
   );
@@ -725,15 +867,21 @@ function AddSpecimenForm({ item, onSuccess }: AddSpecimenFormProps) {
   const [formData, setFormData] = useState({
     barcode: '',
     call_number: '',
+    volume_designation: '',
+    borrow_status: '' as string,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (item.id == null) return;
     if (!validateCallNumber(formData.call_number)) return;
     setIsLoading(true);
     try {
-      await api.updateItem(item.id, {
-        specimens: [{ ...formData, id: 0, status: 0, availability: 0 } as Specimen],
+      await api.createSpecimen(item.id, {
+        barcode: formData.barcode || undefined,
+        call_number: formData.call_number || undefined,
+        volume_designation: formData.volume_designation || undefined,
+        borrow_status: formData.borrow_status ? parseInt(formData.borrow_status, 10) : undefined,
       });
       onSuccess();
     } catch (error) {
@@ -749,7 +897,6 @@ function AddSpecimenForm({ item, onSuccess }: AddSpecimenFormProps) {
         label={t('items.specimenBarcode')}
         value={formData.barcode}
         onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-        required
       />
       <CallNumberField
         label={t('items.callNumber')}
@@ -758,6 +905,29 @@ function AddSpecimenForm({ item, onSuccess }: AddSpecimenFormProps) {
         suggestedValue={suggestedCallNumber}
         placeholder={suggestedCallNumber}
       />
+      <Input
+        label={t('items.volumeDesignation')}
+        value={formData.volume_designation}
+        onChange={(e) => setFormData({ ...formData, volume_designation: e.target.value })}
+        placeholder="e.g. t. 2"
+      />
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          {t('items.borrowStatus')}
+        </label>
+        <select
+          value={formData.borrow_status}
+          onChange={(e) => setFormData({ ...formData, borrow_status: e.target.value })}
+          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+        >
+          <option value="">{t('items.notSpecified')}</option>
+          {STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {t(opt.labelKey)}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="flex justify-end gap-2 pt-4">
         <Button type="submit" isLoading={isLoading}>
           {t('common.add')}
@@ -780,16 +950,27 @@ function EditSpecimenForm({ item, specimen, onSuccess }: EditSpecimenFormProps) 
   const [formData, setFormData] = useState({
     barcode: specimen.barcode || '',
     call_number: specimen.call_number || '',
+    volume_designation: specimen.volume_designation || '',
+    borrow_status: specimen.borrow_status != null ? String(specimen.borrow_status) : '',
+    place: specimen.place != null ? String(specimen.place) : '',
+    notes: specimen.notes || '',
+    price: specimen.price || '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (item.id == null) return;
     if (!validateCallNumber(formData.call_number)) return;
     setIsLoading(true);
     try {
       await api.updateSpecimen(item.id, specimen.id, {
-        barcode: formData.barcode,
-        call_number: formData.call_number,
+        barcode: formData.barcode || undefined,
+        call_number: formData.call_number || undefined,
+        volume_designation: formData.volume_designation || undefined,
+        borrow_status: formData.borrow_status ? parseInt(formData.borrow_status, 10) : undefined,
+        place: formData.place ? parseInt(formData.place, 10) : undefined,
+        notes: formData.notes || undefined,
+        price: formData.price || undefined,
       });
       onSuccess();
     } catch (error) {
@@ -805,7 +986,6 @@ function EditSpecimenForm({ item, specimen, onSuccess }: EditSpecimenFormProps) 
         label={t('items.specimenBarcode')}
         value={formData.barcode}
         onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-        required
       />
       <CallNumberField
         label={t('items.callNumber')}
@@ -814,6 +994,39 @@ function EditSpecimenForm({ item, specimen, onSuccess }: EditSpecimenFormProps) 
         suggestedValue={suggestedCallNumber}
         excludeSpecimenId={specimen.id}
         placeholder={suggestedCallNumber}
+      />
+      <Input
+        label={t('items.volumeDesignation')}
+        value={formData.volume_designation}
+        onChange={(e) => setFormData({ ...formData, volume_designation: e.target.value })}
+        placeholder="e.g. t. 2"
+      />
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          {t('items.borrowStatus')}
+        </label>
+        <select
+          value={formData.borrow_status}
+          onChange={(e) => setFormData({ ...formData, borrow_status: e.target.value })}
+          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+        >
+          <option value="">{t('items.notSpecified')}</option>
+          {STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {t(opt.labelKey)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Input
+        label={t('items.specimenNotes')}
+        value={formData.notes}
+        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+      />
+      <Input
+        label={t('items.specimenPrice')}
+        value={formData.price}
+        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
       />
       <div className="flex justify-end gap-2 pt-4">
         <Button type="submit" isLoading={isLoading}>

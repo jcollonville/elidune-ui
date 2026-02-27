@@ -89,11 +89,9 @@ export default function ItemsPage() {
     navigate(`/items/${item.id}`);
   };
 
-  const formatAuthors = (authors?: Author[]) => {
-    if (!authors || authors.length === 0) return '-';
-    return authors
-      .map((a) => `${a.firstname || ''} ${a.lastname || ''}`.trim())
-      .join(', ');
+  const formatAuthor = (author?: Author | null) => {
+    if (!author) return '-';
+    return `${author.firstname || ''} ${author.lastname || ''}`.trim() || '-';
   };
 
   const getStatusBadge = (status?: number) => {
@@ -182,34 +180,24 @@ export default function ItemsPage() {
       ),
     },
     {
-      key: 'authors',
-      header: t('items.authors'),
+      key: 'author',
+      header: t('items.author'),
       render: (item: ItemShort) => (
         <span className="text-gray-600 dark:text-gray-300">
-          {formatAuthors(item.authors)}
+          {formatAuthor(item.author)}
         </span>
       ),
-    },
-    {
-      key: 'public_type',
-      header: t('items.publicType'),
-      render: (item: ItemShort) => (
-        <span className="text-gray-600 dark:text-gray-300">
-          {item.public_type ? getCodeLabel(t, PUBLIC_TYPE_OPTIONS, item.public_type) : '-'}
-        </span>
-      ),
-      className: 'hidden lg:table-cell',
     },
     {
       key: 'specimens',
       header: t('items.specimens'),
       render: (item: ItemShort) => {
-        const total = item.nb_specimens || 0;
-        const borrowed = item.nb_borrowed_specimens || 0;
+        const total = item.nb_specimens ?? 0;
+        const available = item.nb_available ?? 0;
         if (total === 0) return <span className="text-gray-500 dark:text-gray-400">-</span>;
         return (
           <span className="text-gray-600 dark:text-gray-300">
-            {borrowed}/{total}
+            {available}/{total}
           </span>
         );
       },
@@ -389,12 +377,12 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<{
-    title1: string;
+    title: string;
     isbn: string;
     media_type: MediaType;
     publication_date: string;
   }>({
-    title1: '',
+    title: '',
     isbn: '',
     media_type: 'b',
     publication_date: '',
@@ -464,7 +452,7 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
         // Prefill form with Z39.50 data
         setFormData({
           ...formData,
-          title1: item.title || formData.title1,
+          title: item.title || formData.title,
           media_type: item.media_type || formData.media_type,
           publication_date: item.date || formData.publication_date,
         });
@@ -497,8 +485,8 @@ function CreateItemForm({ onSuccess }: CreateItemFormProps) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input
         label={t('items.titleField')}
-        value={formData.title1}
-        onChange={(e) => setFormData({ ...formData, title1: e.target.value })}
+        value={formData.title}
+        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
         required
       />
       <div className="grid grid-cols-2 gap-4">

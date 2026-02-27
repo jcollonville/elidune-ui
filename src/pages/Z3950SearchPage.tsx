@@ -274,7 +274,7 @@ export default function Z3950SearchPage() {
       header: t('items.authors'),
       render: (item: Z3950Result) => (
         <span className="text-gray-600 dark:text-gray-300">
-          {formatAuthors(item.authors)}
+          {formatAuthors(item.author ? [item.author] : [])}
         </span>
       ),
     },
@@ -507,7 +507,7 @@ export default function Z3950SearchPage() {
                   {selectedItem.title}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {formatAuthors(selectedItem.authors)}
+                  {formatAuthors(selectedItem.author ? [selectedItem.author] : [])}
                   {selectedItem.date && ` • ${selectedItem.date}`}
                 </p>
                 {selectedItem.isbn && (
@@ -571,7 +571,7 @@ export default function Z3950SearchPage() {
                             ? buildSuggestedCallNumber({
                                 categoryCode: 'IMP',
                                 year: selectedItem.date,
-                                authorOrCollectorName: selectedItem.authors?.[0]?.lastname,
+                                authorOrCollectorName: selectedItem.author?.lastname,
                               })
                             : undefined
                         }

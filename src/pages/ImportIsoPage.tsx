@@ -48,10 +48,7 @@ function getMediaTypeTranslationKey(mediaType: MediaType): string {
 }
 
 // Types
-type FileFormat = 'iso2709' | 'marcxml';
-type Encoding = 'utf-8' | 'iso-8859-1' | 'windows-1252' | 'iso-8859-15' | 'iso-8859-4';
-
-/** Parsed field for preview table: Tag, Indicateurs, Sous-champs, Valeur */
+/** Parsed field for preview table: tag, indicators, subfields, value */
 export interface MarcFieldDisplay {
   tag: string;
   indicators: string;
@@ -59,7 +56,7 @@ export interface MarcFieldDisplay {
   value: string;
 }
 
-/** MARC field mapping for API payload (e.g. { tag: "200", subfields: { a: "Titre" } }) */
+/** MARC field mapping for API payload (e.g. { tag: "200", subfields: { a: "Title" } }) */
 export interface MarcFieldMapping {
   tag: string;
   indicators?: string;
@@ -82,6 +79,8 @@ interface ParsedRecord {
   subject?: string;
   media_type?: MediaType;
   raw_fields: Map<string, string[]>;
+  /** Encoding detected for this notice (ISO 2709 only; MARCXML is UTF-8) */
+  detectedEncoding?: RecordEncoding;
   status: 'pending' | 'importing' | 'imported' | 'error';
   error?: string;
   importedId?: number;
@@ -164,7 +163,7 @@ function buildSpecimenFrom9xx(record: ParsedRecord): { barcode: string; call_num
   return { barcode: barcode || `IMPORT-${Date.now()}`, call_number: call_number || undefined };
 }
 
-/** Parse raw_fields into rows for preview table (Tag, Indicateurs, Sous-champs, Valeur) */
+/** Parse raw_fields into rows for preview table (tag, indicators, subfields, value) */
 function rawFieldsToDisplayRows(rawFields: Map<string, string[]>): MarcFieldDisplay[] {
   const rows: MarcFieldDisplay[] = [];
   const tags = Array.from(rawFields.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -243,13 +242,15 @@ function parseAuthor(fieldData: string, delimiter = '\x1F'): Author {
 function buildRecordFromFields(
   rawFields: Map<string, string[]>,
   leader: string,
-  index: number
+  index: number,
+  detectedEncoding?: RecordEncoding
 ): ParsedRecord {
   const record: ParsedRecord = {
     id: `record-${index}-${Date.now()}`,
     raw_fields: rawFields,
     status: 'pending',
   };
+  if (detectedEncoding !== undefined) record.detectedEncoding = detectedEncoding;
 
   // Title (200$a, 200$e for UNIMARC, 245$a, 245$b for MARC21)
   const field200 = rawFields.get('200')?.[0];
@@ -411,6 +412,204 @@ function detectMarcFormat(_leader: string, rawFields: Map<string, string[]>): Ma
   return 'MARC21';
 }
 
+/** Encoding detected per record for UNIMARC (Guide + field 100 + heuristic) */
+type RecordEncoding = 'utf-8' | 'iso-8859-1' | 'iso-5426' | 'iso-6937';
+
+const SUBFIELD_MARKER = '\x1F';
+
+/** Extract subfield $a from first field 100 (raw format: ind1+ind2 + \x1F + code + value ...) */
+function getField100SubfieldA(rawFields: Map<string, string[]>): string | null {
+  const raw100 = rawFields.get('100')?.[0];
+  if (!raw100) return null;
+  const idx = raw100.indexOf(SUBFIELD_MARKER + 'a');
+  if (idx === -1) return null;
+  const after = raw100.slice(idx + 2);
+  const end = after.indexOf(SUBFIELD_MARKER);
+  return end === -1 ? after : after.slice(0, end);
+}
+
+/**
+ * Detect encoding for one UNIMARC/MARC record (priority: Guide byte 9 → field 100 $a pos 26–28 → heuristic).
+ * A: Byte at index 9 === 0x61 ('a') → UTF-8.
+ * B: Field 100 $a positions 26–28: "50 " → UTF-8, "01" → ISO 5426, "02" → ISO 6937.
+ * C: Try UTF-8; on invalid sequence use ISO-8859-1.
+ */
+function detectRecordEncoding(rawRecord: Uint8Array): RecordEncoding {
+  if (rawRecord.length <= 9) return 'utf-8';
+
+  // A. Guide (position 9): 0x61 = explicit UTF-8
+  if (rawRecord[9] === 0x61) return 'utf-8';
+
+  // B. Field 100 $a positions 26–28: need to parse record with a tentative decode (directory is ASCII-safe)
+  let decodedForParse: string;
+  try {
+    decodedForParse = new TextDecoder('utf-8', { fatal: true }).decode(rawRecord);
+  } catch {
+    decodedForParse = iconv.decode(Buffer.from(rawRecord), 'iso-8859-1');
+  }
+  try {
+    const recordBuf = Buffer.from(decodedForParse, 'utf8');
+    const marcRecord = parseISO2709Record(recordBuf);
+    const rawFields = marcRecordToRawFields(marcRecord.fields);
+    const field100a = getField100SubfieldA(rawFields);
+    if (field100a && field100a.length >= 28) {
+      const pos26_28 = field100a.slice(26, 28);
+      console.log("pos26_28 => ", pos26_28);
+      if (pos26_28 === '50 ') return 'utf-8';
+      if (pos26_28 === '01') return 'iso-5426';
+      if (pos26_28 === '02') return 'iso-6937';
+    }
+  } catch {
+    // ignore parse errors, fall through to heuristic
+  }
+  // C. Heuristic: try UTF-8; on invalid sequence use ISO-8859-1
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(rawRecord);
+    return 'utf-8';
+  } catch {
+    return 'iso-8859-1';
+  }
+}
+
+/**
+ * Complete ISO 5426 table (G1 set).
+ * Mapping based on NF Z 44-000 and BnF specifications.
+ */
+const ISO5426_CORRECT: Record<number, number> = {
+  // --- Special characters (0xA1 to 0xBF) ---
+  0xa1: 0x0141, // Ł (capital L with stroke)
+  0xa2: 0x00d8, // Ø
+  0xa3: 0x0110, // Đ (capital D with stroke)
+  0xa4: 0x00de, // Þ (capital thorn)
+  0xa5: 0x00c6, // Æ
+  0xa6: 0x0152, // Œ
+  0xa7: 0x02b9, // Prime (modifier letter)
+  0xa8: 0x00b7, // Middle dot
+  0xa9: 0x266d, // Flat sign
+  0xaa: 0x00ae, // ®
+  0xab: 0x00b1, // ±
+  0xac: 0x01a0, // Ơ (capital O with horn)
+  0xad: 0x01af, // Ư (capital U with horn)
+  0xae: 0x02bc, // Apostrophe (modifier letter)
+  0xb1: 0x0142, // ł (small l with stroke)
+  0xb2: 0x00f8, // ø
+  0xb3: 0x0111, // đ
+  0xb4: 0x00fe, // þ
+  0xb5: 0x00e6, // æ (small ae ligature)
+  0xb6: 0x0153, // œ
+  0xb7: 0x02ba, // Double prime
+  0xb8: 0x0131, // ı (dotless i)
+  0xb9: 0x00a3, // £
+  0xba: 0x00f0, // ð (eth)
+  0xbc: 0x01a1, // ơ
+  0xbd: 0x01b0, // ư
+
+  // --- Simple combining diacritics (0xC1 to 0xCF) ---
+  // Reminder: in the byte stream, they appear *before* the base letter.
+  0xc1: 0x0300, // Grave accent `
+  0xc2: 0x0301, // Acute accent ´
+  0xc3: 0x0302, // Circumflex accent ^
+  0xc4: 0x0303, // Tilde ~
+  0xc5: 0x0304, // Macron (overline)
+  0xc6: 0x0306, // Breve ̆
+  0xc7: 0x0307, // Dot above ̇
+  0xc8: 0x0308, // Diaeresis / umlaut ̈
+  0xc9: 0x030c, // Caron / háček ̌
+  0xca: 0x030a, // Ring above ̊
+  0xcb: 0x0327, // Cedilla ̧
+  0xcc: 0x0328, // Ogonek ̨
+  0xcd: 0x0323, // Dot below ̣
+  0xce: 0x0324, // Diaeresis below ̤
+  0xcf: 0x0313, // Smooth breathing (comma above)
+
+  // --- Additional combining diacritics (0xD0 to 0xDF) ---
+  0xd0: 0x030b, // Double acute accent above
+  0xd1: 0x0332, // Low line (macron below)
+  0xd2: 0x0325, // Ring below
+  0xd3: 0x032e, // Breve below
+  0xd4: 0x030d, // Vertical line above
+  0xd5: 0x031c, // Half ring below (left)
+  0xd6: 0x0326, // Comma below
+  0xd7: 0x0310, // Candrabindu
+  0xd8: 0x0317, // Acute accent below
+  0xd9: 0x0316, // Grave accent below
+
+  // --- “Double” diacritics (0xE1 to 0xE4) ---
+  // These accents normally span two characters.
+  0xe1: 0x0361, // Double ligature mark above (e.g. t͡s)
+  0xe2: 0x0360, // Double tilde above
+  0xe8: 0x0333, // Double low line
+};
+
+/**
+ * Optimized decoding function.
+ * Handles the critical case of input order accent + letter → output letter + accent.
+ */
+function decodeIso5426ToUnicode(raw: Uint8Array): string {
+  const out: number[] = [];
+
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+
+    // Check if this byte is a diacritic (range 0xC1–0xDF and 0xE1+)
+    if ((b >= 0xc1 && b <= 0xcf) || (b >= 0xd0 && b <= 0xdf) || (b >= 0xe1 && b <= 0xe8)) {
+      const combiningMark = ISO5426_CORRECT[b];
+      
+      if (i + 1 < raw.length) {
+        const nextByte = raw[i + 1];
+        
+        // Decode the base character (either ASCII or a special G1 character)
+        let baseChar = nextByte;
+        if (nextByte > 0x7f && ISO5426_CORRECT[nextByte]) {
+            baseChar = ISO5426_CORRECT[nextByte];
+        }
+
+        out.push(baseChar); // Base letter first
+        if (combiningMark) out.push(combiningMark); // Accent after
+        
+        i++; // Skip the base character we just consumed
+      }
+    } 
+    // Standard characters (ASCII)
+    else if (b <= 0x7f) {
+      out.push(b);
+    } 
+    // G1 special characters (non-combining, such as Æ, Œ, ł)
+    else {
+      const cp = ISO5426_CORRECT[b];
+      out.push(cp !== undefined ? cp : b);
+    }
+  }
+
+  // Convert to string and normalize to NFC to merge accents with their base letters.
+  // Example: 'e' + '\u0301' becomes 'é' (single code point).
+  return String.fromCodePoint(...out).normalize('NFC');
+}
+
+/** Decode raw record bytes with the given encoding; output is always valid Unicode (UTF-8 when serialized). */
+function decodeRecord(rawRecord: Uint8Array, encoding: RecordEncoding): string {
+  let decoded: string;
+  if (encoding === 'utf-8') {
+    try {
+      decoded = new TextDecoder('utf-8', { fatal: true }).decode(rawRecord);
+    } catch {
+      decoded = iconv.decode(Buffer.from(rawRecord), 'iso-8859-1');
+    }
+  } else if (encoding === 'iso-5426') {
+    decoded = decodeIso5426ToUnicode(rawRecord);
+  } else if (encoding === 'iso-6937') {
+    const buf = Buffer.from(rawRecord);
+    try {
+      decoded = iconv.decode(buf, 'iso6937');
+    } catch {
+      decoded = iconv.decode(buf, 'iso-8859-1');
+    }
+  } else {
+    decoded = iconv.decode(Buffer.from(rawRecord), 'iso-8859-1');
+  }
+  return decoded.normalize('NFC');
+}
+
 /** ISO 2709 single-record parser (same logic as marcjs, browser-safe, no Node stream). Returns { leader, fields }. */
 function parseISO2709Record(recordBuf: Buffer): { leader: string; fields: (string | string[])[] } {
   const leader = recordBuf.toString('utf8', 0, 24);
@@ -446,28 +645,31 @@ function parseISO2709Record(recordBuf: Buffer): { leader: string; fields: (strin
 }
 
 // ISO 2709 Parser. Structure: Label (24), Directory (12-char entries), Data (FT=0x1E, RT=0x1D).
-function parseISO2709(arrayBuffer: ArrayBuffer, encoding: Encoding): { records: ParsedRecord[]; detectedFormat: MarcFormat | null } {
+// Per-record encoding detection for UNIMARC: Guide (byte 9) → field 100 $a (26–28) → heuristic.
+function parseISO2709(arrayBuffer: ArrayBuffer): { records: ParsedRecord[]; detectedFormat: MarcFormat | null } {
   const records: ParsedRecord[] = [];
   let detectedFormat: MarcFormat | null = null;
 
-  const buf = Buffer.from(arrayBuffer);
-  const decoded = encoding === 'utf-8'
-    ? buf.toString('utf8')
-    : iconv.decode(buf, encoding);
-  const utf8Buffer = Buffer.from(decoded, 'utf8');
-
+  const buf = new Uint8Array(arrayBuffer);
   const RT = 0x1D;
   let start = 0;
   let index = 0;
-  while (start < utf8Buffer.length) {
-    const pos = utf8Buffer.indexOf(RT, start);
+
+  while (start < buf.length) {
+    const pos = buf.indexOf(RT, start);
     if (pos === -1) break;
-    const chunk = utf8Buffer.subarray(start, pos);
+    const rawChunk = buf.subarray(start, pos);
     start = pos + 1;
-    if (chunk.length < 24) continue;
+    if (rawChunk.length < 24) {
+      index += 1;
+      continue;
+    }
 
     try {
-      const recordBuf = Buffer.from(chunk);
+      const recordEncoding = detectRecordEncoding(rawChunk);
+      const decoded = decodeRecord(rawChunk, recordEncoding);
+      const recordBuf = Buffer.from(decoded, 'utf8');
+
       const leader = recordBuf.toString('utf8', 0, 24);
       const baseAddress = parseInt(leader.substring(12, 17), 10);
       if (baseAddress < 24 || baseAddress > recordBuf.length) {
@@ -478,7 +680,7 @@ function parseISO2709(arrayBuffer: ArrayBuffer, encoding: Encoding): { records: 
       const marcRecord = parseISO2709Record(recordBuf);
       const rawFields = marcRecordToRawFields(marcRecord.fields);
       if (detectedFormat === null) detectedFormat = detectMarcFormat(marcRecord.leader, rawFields);
-      const record = buildRecordFromFields(rawFields, marcRecord.leader, index);
+      const record = buildRecordFromFields(rawFields, marcRecord.leader, index, recordEncoding);
       if (record.title1) records.push(record);
     } catch (e) {
       console.error('Error parsing ISO 2709 record', index, e);
@@ -573,22 +775,7 @@ export default function ImportIsoPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  const ENCODING_OPTIONS: { value: Encoding; label: string }[] = [
-    { value: 'utf-8', label: t('importMarc.encodings.utf8') },
-    { value: 'iso-8859-1', label: t('importMarc.encodings.iso88591') },
-    { value: 'iso-8859-4', label: t('importMarc.encodings.iso88594') },
-    { value: 'iso-8859-15', label: t('importMarc.encodings.iso885915') },
-    { value: 'windows-1252', label: t('importMarc.encodings.windows1252') },
-  ];
-
-  const FORMAT_OPTIONS: { value: FileFormat; label: string; extensions: string }[] = [
-    { value: 'iso2709', label: t('importMarc.formats.iso2709'), extensions: '.mrc, .not, .dat' },
-    { value: 'marcxml', label: t('importMarc.formats.marcxml'), extensions: '.xml, .marcxml' },
-  ];
-
   // Options state (always visible)
-  const [fileFormat, setFileFormat] = useState<FileFormat>('iso2709');
-  const [encoding, setEncoding] = useState<Encoding>('utf-8');
   const [showOptions, setShowOptions] = useState(true);
 
   // Sources (for specimen creation)
@@ -664,14 +851,27 @@ export default function ImportIsoPage() {
     }
   };
 
-  const parseFile = useCallback(async (file: File, format: FileFormat, enc: Encoding): Promise<{ records: ParsedRecord[]; detectedFormat: MarcFormat | null }> => {
+  const parseFile = useCallback(async (file: File): Promise<{ records: ParsedRecord[]; detectedFormat: MarcFormat | null }> => {
     const arrayBuffer = await file.arrayBuffer();
-    if (format === 'marcxml') {
-      const decoder = new TextDecoder(enc);
-      const content = decoder.decode(arrayBuffer);
+    const bytes = new Uint8Array(arrayBuffer);
+
+    // Sniff format: if first non-whitespace char is '<' → MARCXML, otherwise assume ISO 2709.
+    let i = 0;
+    // Skip UTF-8 BOM if present
+    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+      i = 3;
+    }
+    while (i < bytes.length && (bytes[i] === 0x20 || bytes[i] === 0x09 || bytes[i] === 0x0a || bytes[i] === 0x0d)) {
+      i += 1;
+    }
+    const first = i < bytes.length ? bytes[i] : 0;
+    const isXml = first === 0x3c; // '<'
+
+    if (isXml) {
+      const content = new TextDecoder('utf-8').decode(arrayBuffer);
       return { records: parseMARCXML(content), detectedFormat: null };
     }
-    return parseISO2709(arrayBuffer, enc);
+    return parseISO2709(arrayBuffer);
   }, []);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -683,13 +883,10 @@ export default function ImportIsoPage() {
     setFileName(file.name);
 
     try {
-      const { records: parsed, detectedFormat } = await parseFile(file, fileFormat, encoding);
+      const { records: parsed, detectedFormat } = await parseFile(file);
 
       if (parsed.length === 0) {
-        setParseError(t('importMarc.noRecordsFound', { 
-          format: FORMAT_OPTIONS.find(f => f.value === fileFormat)?.label,
-          encoding 
-        }));
+        setParseError(t('importMarc.noRecordsFound'));
       } else {
         setRecords(parsed);
         setDetectedMarcFormat(detectedFormat);
@@ -700,7 +897,7 @@ export default function ImportIsoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [fileFormat, encoding, parseFile, t, FORMAT_OPTIONS]);
+  }, [parseFile, t]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -733,20 +930,22 @@ export default function ImportIsoPage() {
   };
 
   const buildItemPayload = (record: ParsedRecord) => ({
-    title1: record.title1,
-    title2: record.title2,
-    isbn: record.identification,
-    authors1: record.authors1,
-    authors2: record.authors2,
-    publication_date: record.publication_date,
-    abstract_: record.abstract_,
-    keywords: record.keywords,
-    media_type: record.media_type,
-    edition: record.edition_name ? {
-      id: 0,
-      name: record.edition_name,
-      place: record.edition_place,
-    } : undefined,
+    title: record.title1 ?? undefined,
+    isbn: record.identification ?? undefined,
+    authors: [...(record.authors1 ?? []), ...(record.authors2 ?? [])],
+    publication_date: record.publication_date ?? undefined,
+    abstract_: record.abstract_ ?? undefined,
+    keywords: record.keywords ?? undefined,
+    subject: record.subject ?? undefined,
+    media_type: record.media_type ?? undefined,
+    edition: record.edition_name || record.edition_place
+      ? {
+          id: null,
+          publisher_name: record.edition_name ?? undefined,
+          place_of_publication: record.edition_place ?? undefined,
+          date: record.publication_date ?? undefined,
+        }
+      : undefined,
   });
 
   const completeImportWithItemId = async (record: ParsedRecord, itemId: number) => {
@@ -769,11 +968,11 @@ export default function ImportIsoPage() {
 
     try {
       const item = await api.createItem(buildItemPayload(record));
-      await completeImportWithItemId(record, item.id);
+      if (item.id != null) await completeImportWithItemId(record, item.id);
     } catch (error) {
       if (isDuplicateIsbnError(error) && record.identification) {
         try {
-          const response = await api.getItems({ isbn: record.identification, per_page: 50 });
+          const response = await api.getItems({ isbn: record.identification, per_page: 50, archive: true });
           setDuplicateModalError(null);
           setDuplicateModal({ record, matches: response.items || [] });
         } catch (fetchErr) {
@@ -812,7 +1011,7 @@ export default function ImportIsoPage() {
     setDuplicateModalError(null);
     try {
       const item = await api.createItem(buildItemPayload(duplicateModal.record), { allowDuplicateIsbn: true });
-      await completeImportWithItemId(duplicateModal.record, item.id);
+      if (item.id != null) await completeImportWithItemId(duplicateModal.record, item.id);
       setDuplicateModal(null);
     } catch (err) {
       console.error('Error creating item with duplicate ISBN:', err);
@@ -882,10 +1081,7 @@ export default function ImportIsoPage() {
   const importedCount = records.filter(r => r.status === 'imported').length;
   const errorCount = records.filter(r => r.status === 'error').length;
 
-  const getAcceptedExtensions = (): string => {
-    const format = FORMAT_OPTIONS.find(f => f.value === fileFormat);
-    return format?.extensions.split(', ').join(',') || '*';
-  };
+  const getAcceptedExtensions = (): string => '.mrc,.not,.dat,.xml,.marcxml';
 
   const columns = [
     {
@@ -969,7 +1165,7 @@ export default function ImportIsoPage() {
       header: t('items.authors'),
       render: (record: ParsedRecord) => (
         <span className="text-gray-600 dark:text-gray-300 truncate">
-          {formatAuthors(record.authors1)}
+          {formatAuthors([...(record.authors1 ?? []), ...(record.authors2 ?? [])])}
         </span>
       ),
       className: 'hidden lg:table-cell',
@@ -991,23 +1187,50 @@ export default function ImportIsoPage() {
           }
         </Badge>
       ),
-      className: 'hidden md:table-cell',
+      className: 'hidden md:table-cell sticky right-40 z-10 bg-white dark:bg-gray-900 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_8px_rgba(0,0,0,0.3)]',
     },
     {
       key: 'actions',
       header: '',
       render: (record: ParsedRecord) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           {record.status === 'pending' && (
             <>
               <Button
                 size="sm"
-                variant="ghost"
+                variant="primary"
                 onClick={() => importRecord(record)}
                 title={t('importMarc.importOne')}
-                className="text-gray-500 hover:text-amber-600 dark:hover:text-amber-400"
+                leftIcon={<Download className="h-4 w-4" />}
               >
-                <Download className="h-4 w-4" />
+                {t('importMarc.import')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleRemoveRecord(record.id)}
+                className="text-gray-400 hover:text-red-500"
+                title={t('common.delete')}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+          {record.status === 'importing' && (
+            <span className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t('importMarc.importProgress')}
+            </span>
+          )}
+          {record.status === 'error' && (
+            <>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => importRecord(record)}
+                leftIcon={<Download className="h-4 w-4" />}
+              >
+                {t('importMarc.import')}
               </Button>
               <Button
                 size="sm"
@@ -1030,7 +1253,7 @@ export default function ImportIsoPage() {
           )}
         </div>
       ),
-      className: 'w-24',
+      className: 'w-40 sticky right-0 z-10 bg-white dark:bg-gray-900 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_8px_rgba(0,0,0,0.3)] whitespace-nowrap',
     },
   ];
 
@@ -1064,42 +1287,6 @@ export default function ImportIsoPage() {
           {showOptions && (
             <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Format selector */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {t('importMarc.fileFormat')}
-                  </label>
-                  <select
-                    value={fileFormat}
-                    onChange={(e) => setFileFormat(e.target.value as FileFormat)}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  >
-                    {FORMAT_OPTIONS.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label} ({option.extensions})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Encoding selector */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {t('importMarc.encoding')}
-                  </label>
-                  <select
-                    value={encoding}
-                    onChange={(e) => setEncoding(e.target.value as Encoding)}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  >
-                    {ENCODING_OPTIONS.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* Source selector (for specimen creation) */}
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1155,9 +1342,6 @@ export default function ImportIsoPage() {
                 </div>
               </div>
 
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                💡 {t('importMarc.encodingHint')}
-              </p>
             </div>
           )}
         </div>
@@ -1193,14 +1377,7 @@ export default function ImportIsoPage() {
               <p className="text-gray-500 dark:text-gray-400 mb-4">
                 {t('importMarc.orClickToBrowse')}
               </p>
-              <div className="flex flex-wrap justify-center gap-2 text-sm">
-                <Badge variant="default">
-                  {FORMAT_OPTIONS.find(f => f.value === fileFormat)?.label}
-                </Badge>
-                <Badge variant="default">
-                  {ENCODING_OPTIONS.find(e => e.value === encoding)?.label}
-                </Badge>
-              </div>
+              <div className="flex flex-wrap justify-center gap-2 text-sm" />
             </>
           )}
         </div>
@@ -1351,8 +1528,8 @@ export default function ImportIsoPage() {
 
           {/* Table with expandable rows for raw MARC fields */}
           <Card padding="none">
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="overflow-x-auto -mx-px">
+              <table className="w-full min-w-[800px]">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-800">
                     {columns.map((column) => (
@@ -1387,6 +1564,9 @@ export default function ImportIsoPage() {
                       {expandedRecordId === record.id && (
                         <tr key={`${record.id}-detail`} className="bg-gray-50 dark:bg-gray-800/50">
                           <td colSpan={columns.length} className="px-4 py-3">
+                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                              {t('importMarc.detectedEncoding', { encoding: record.detectedEncoding ?? 'utf-8' })}
+                            </div>
                             <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
                               {t('importMarc.rawFields')}
                             </div>
@@ -1500,7 +1680,7 @@ export default function ImportIsoPage() {
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
                             {match.isbn && `${t('items.isbn')}: ${match.isbn}`}
-                            {match.authors?.length ? ` • ${formatAuthors(match.authors)}` : ''}
+                            {match.author ? ` • ${formatAuthors([match.author])}` : ''}
                           </p>
                         </div>
                         <span className="text-sm text-amber-600 dark:text-amber-400">

@@ -137,79 +137,140 @@ export interface MediaTypeOption {
   label: string;
 }
 
-// Item types
-export interface Item {
+// Item types — aligned with README-items-specimens-data.md
+
+export interface Author {
   id: number;
-  media_type?: MediaType;
-  public_type?: number;
-  isbn?: string;
-  title1?: string;
-  title2?: string;
-  title3?: string;
-  publication_date?: string;
-  lang?: number;
-  authors1?: Author[];
-  authors2?: Author[];
-  edition?: Edition;
-  serie?: Serie;
-  collection?: Collection;
+  lastname?: string | null;
+  firstname?: string | null;
+  bio?: string | null;
+  notes?: string | null;
+  function?: string | null;
+}
+
+export interface Edition {
+  id: number | null;
+  publisher_name?: string | null;
+  place_of_publication?: string | null;
+  date?: string | null;
+}
+
+export interface Serie {
+  id: number | null;
+  key?: string | null;
+  name?: string | null;
+  issn?: string | null;
+}
+
+export interface Collection {
+  id: number | null;
+  key?: string | null;
+  primary_title?: string | null;
+  secondary_title?: string | null;
+  tertiary_title?: string | null;
+  issn?: string | null;
+}
+
+export interface Item {
+  id?: number | null;
+  marc_format?: string | null;
+  media_type?: MediaType | string | null;
+  isbn?: string | null;
+  barcode?: string | null;
+  call_number?: string | null;
+  price?: string | null;
+  title?: string | null;
+  genre?: number | null;
+  subject?: string | null;
+  audience_type?: number | null;
+  lang?: number | null;
+  lang_orig?: number | null;
+  publication_date?: string | null;
+  page_extent?: string | null;
+  format?: string | null;
+  table_of_contents?: string | null;
+  accompanying_material?: string | null;
+  abstract_?: string | null;
+  notes?: string | null;
+  keywords?: string | null;
+  state?: string | null;
+  is_valid?: number | null;
+  series_id?: number | null;
+  series_volume_number?: number | null;
+  edition_id?: number | null;
+  collection_id?: number | null;
+  collection_sequence_number?: number | null;
+  collection_volume_number?: number | null;
+  status?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  archived_at?: string | null;
+  authors?: Author[];
+  series?: Serie | null;
+  collection?: Collection | null;
+  edition?: Edition | null;
   specimens?: Specimen[];
-  abstract_?: string;
-  keywords?: string;
-  subject?: string;
-  nb_specimens?: number;
-  nb_borrowed_specimens?: number;
-  is_valid?: number;
+  marc_record?: unknown;
 }
 
 export interface ItemShort {
   id: number;
-  media_type?: MediaType;
-  public_type?: number;
-  isbn?: string;
-  title?: string;
-  date?: string;
-  status?: number;
-  is_local?: number;
-  is_archive?: number;
-  authors?: Author[];
-  nb_specimens?: number;
-  nb_borrowed_specimens?: number;
-}
-
-export interface Author {
-  id: number;
-  lastname?: string;
-  firstname?: string;
-  function?: string;
-}
-
-export interface Edition {
-  id: number;
-  name?: string;
-  place?: string;
-  date?: string;
-}
-
-export interface Serie {
-  id: number;
-  name?: string;
-  volume_number?: number;
-}
-
-export interface Collection {
-  id: number;
-  title1?: string;
-  issn?: string;
+  media_type?: MediaType | string | null;
+  isbn?: string | null;
+  title?: string | null;
+  date?: string | null;
+  status?: number | null;
+  is_local?: number | null;
+  is_valid?: number | null;
+  archived_at?: string | null;
+  nb_specimens?: number | null;
+  nb_available?: number | null;
+  author?: Author | null;
+  source_name?: string | null;
 }
 
 export interface Specimen {
   id: number;
-  barcode?: string;
-  call_number?: string;
-  status?: number;
-  source_name?: string;
-  availability?: number;
+  item_id?: number | null;
+  source_id?: number | null;
+  barcode?: string | null;
+  call_number?: string | null;
+  volume_designation?: string | null;
+  place?: number | null;
+  borrow_status?: number | null;
+  circulation_status?: number | null;
+  notes?: string | null;
+  price?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  archived_at?: string | null;
+  source_name?: string | null;
+  availability?: number | null;
+}
+
+/** Payload for POST /items/{id}/specimens */
+export interface CreateSpecimen {
+  barcode?: string | null;
+  call_number?: string | null;
+  volume_designation?: string | null;
+  place?: number | null;
+  borrow_status?: number | null;
+  notes?: string | null;
+  price?: string | null;
+  source_id?: number | null;
+  source_name?: string | null;
+}
+
+/** Payload for PUT /items/{id}/specimens/{sid} */
+export interface UpdateSpecimen {
+  barcode?: string | null;
+  call_number?: string | null;
+  volume_designation?: string | null;
+  place?: number | null;
+  borrow_status?: number | null;
+  notes?: string | null;
+  price?: string | null;
+  source_id?: number | null;
 }
 
 // Loan types
