@@ -12,6 +12,7 @@ interface TableProps<T> {
   onRowClick?: (item: T) => void;
   isLoading?: boolean;
   emptyMessage?: string;
+  hideHeader?: boolean;
 }
 
 export default function Table<T>({
@@ -21,6 +22,7 @@ export default function Table<T>({
   onRowClick,
   isLoading = false,
   emptyMessage = 'Aucune donnée',
+  hideHeader = false,
 }: TableProps<T>) {
   if (isLoading) {
     return (
@@ -41,18 +43,20 @@ export default function Table<T>({
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
-        <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-800">
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ${column.className || ''}`}
-              >
-                {column.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
+        {!hideHeader && (
+          <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
+            <tr className="border-b border-gray-200 dark:border-gray-800">
+              {columns.map((column) => (
+                <th
+                  key={column.key}
+                  className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ${column.className || ''}`}
+                >
+                  {column.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
           {data.map((item) => (
             <tr

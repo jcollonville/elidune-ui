@@ -109,6 +109,7 @@ export default function Z3950SearchPage() {
   // Sources state
   const [sources, setSources] = useState<Source[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [sourcesError, setSourcesError] = useState<string | null>(null);
 
   // Load servers and sources from settings on mount
   useEffect(() => {
@@ -131,9 +132,9 @@ export default function Z3950SearchPage() {
     
     const fetchSources = async () => {
       try {
+        setSourcesError(null);
         const sourcesData = await api.getSources(false);
         setSources(sourcesData);
-        // Select default source if available
         const defaultSource = sourcesData.find(s => s.default);
         if (defaultSource) {
           setSelectedSourceId(defaultSource.id);
@@ -142,6 +143,7 @@ export default function Z3950SearchPage() {
         }
       } catch (error) {
         console.error('Error fetching sources:', error);
+        setSourcesError(t('z3950.sourcesError'));
       }
     };
     
@@ -234,6 +236,10 @@ export default function Z3950SearchPage() {
 
   const handleImport = async () => {
     if (selectedItemId == null) return;
+    if (!selectedSourceId) {
+      setImportError(t('z3950.sourceRequired'));
+      return;
+    }
     const invalidCallNumber = specimens.find(s => s.call_number.trim() !== '' && !validateCallNumber(s.call_number));
     if (invalidCallNumber) {
       setImportError(t('items.callNumberInvalid'));
@@ -592,25 +598,31 @@ export default function Z3950SearchPage() {
               </div>
             )}
 
-            {/* Source selector */}
-            {sources.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('items.source')}
-                </label>
+            {/* Source selector (required for /z3950/import) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                {t('items.source')} <span className="text-red-500">*</span>
+              </label>
+              {sourcesError ? (
+                <p className="text-sm text-red-600 dark:text-red-400">{sourcesError}</p>
+              ) : sources.length === 0 ? (
+                <p className="text-sm text-amber-600 dark:text-amber-400">{t('z3950.noSources')}</p>
+              ) : (
                 <select
                   value={selectedSourceId || ''}
                   onChange={(e) => setSelectedSourceId(e.target.value || null)}
                   className="w-full rounded-lg border bg-white dark:bg-gray-900 px-3 py-2.5 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-700 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:focus:ring-amber-500/40"
                 >
+                  <option value="">{t('z3950.selectSource')}</option>
                   {sources.map((source) => (
                     <option key={source.id} value={source.id}>
                       {source.name || `Source ${source.id}`}
+                      {source.default ? ` (${t('importMarc.default')})` : ''}
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Specimens */}
             <div>
@@ -687,6 +699,7 @@ export default function Z3950SearchPage() {
                 type="button"
                 onClick={handleImport}
                 isLoading={isImporting}
+                disabled={!selectedSourceId || sources.length === 0}
                 leftIcon={<Download className="h-4 w-4" />}
               >
                 {t('z3950.import')}

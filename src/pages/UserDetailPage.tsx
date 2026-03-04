@@ -234,16 +234,26 @@ export default function UserDetailPage() {
     {
       key: 'title',
       header: 'Document',
-      render: (loan: Loan) => (
-        <div>
-          <p className="font-medium text-gray-900 dark:text-white">
-            {loan.item.title || 'Sans titre'}
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {loan.specimen_identification}
-          </p>
-        </div>
-      ),
+      render: (loan: Loan) => {
+        const specs = loan.item?.specimens;
+        const spec = specs?.length ? (specs.find((s) => s.availability === 1) ?? specs[0]) : null;
+        const specimenBarcode = spec ? (spec.barcode ?? spec.id) : loan.specimen_identification;
+        return (
+          <div>
+            <p className="font-medium text-gray-900 dark:text-white">
+              {loan.item.title || 'Sans titre'}
+            </p>
+            <div className="text-sm text-gray-500 dark:text-gray-400 space-y-0.5 mt-0.5">
+              {loan.item.isbn && (
+                <p>
+                  {t('items.isbn')}: <span className="font-mono">{loan.item.isbn}</span>
+                </p>
+              )}
+              <p className="font-mono">{specimenBarcode ?? '-'}</p>
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: 'date',
@@ -369,7 +379,6 @@ export default function UserDetailPage() {
             <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800">
               <CardHeader
                 title={t('loans.activeLoans')}
-                subtitle={`${loans.length} ${t('loans.count', { count: loans.length })}`}
               />
             </div>
             <Table

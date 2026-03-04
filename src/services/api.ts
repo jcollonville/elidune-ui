@@ -1,11 +1,11 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
-import type { 
-  LoginRequest, 
-  LoginResponse, 
-  User, 
+import type {
+  LoginRequest,
+  LoginResponse,
+  User,
   UserShort,
-  Item, 
-  ItemShort, 
+  Item,
+  ItemShort,
   ImportResult,
   Loan,
   Stats,
@@ -26,8 +26,11 @@ import type {
   CatalogStats,
   Source,
   Specimen,
+  CreateItemSpecimenInput,
   CreateSpecimen,
   UpdateSpecimen,
+  EnqueueResult,
+  MarcBatchImportReport,
 } from '@/types';
 
 const API_BASE_URL = '/api/v1';
@@ -161,7 +164,7 @@ class ApiService {
     author?: string;
     isbn?: string;
     media_type?: MediaType;
-    public_type?: number;
+    audience_type?: number;
     freesearch?: string;
     page?: number;
     per_page?: number;
@@ -177,7 +180,7 @@ class ApiService {
   }
 
   async createItem(
-    item: Partial<Item>,
+    payload: Partial<Item> & { specimens?: CreateItemSpecimenInput[] },
     options?: { allowDuplicateIsbn?: boolean; confirmReplaceExistingId?: string | null }
   ): Promise<ImportResult<Item>> {
     const params: Record<string, any> = {
@@ -186,7 +189,7 @@ class ApiService {
     if (options?.confirmReplaceExistingId != null) {
       params.confirm_replace_existing_id = options.confirmReplaceExistingId;
     }
-    const response = await this.client.post<ImportResult<Item>>('/items', item, { params });
+    const response = await this.client.post<ImportResult<Item>>('/items', payload, { params });
     return response.data;
   }
 
@@ -200,7 +203,12 @@ class ApiService {
   }
 
   async updateSpecimen(itemId: string, specimenId: string, data: UpdateSpecimen): Promise<Specimen> {
-    const response = await this.client.put<Specimen>(`/items/${itemId}/specimens/${specimenId}`, data);
+
+
+    const response = await this.client.put<Specimen>(`/items/${itemId}/specimens`, {
+      id: specimenId,
+      ...data,
+    });
     return response.data;
   }
 
@@ -415,14 +423,57 @@ class ApiService {
     sourceId?: string,
     options?: { confirmReplaceExistingId?: string | null }
   ): Promise<ImportResult<Item>> {
+    const specimensWithSource =
+      specimens?.map((specimen) => ({
+        ...specimen,
+        source_id: sourceId,
+      })) ?? undefined;
+
     const response = await this.client.post<ImportResult<Item>>('/z3950/import', {
       item_id: itemId,
-      specimens,
+      specimens: specimensWithSource,
       source_id: sourceId,
       ...(options?.confirmReplaceExistingId != null && {
         confirm_replace_existing_id: options.confirmReplaceExistingId,
       }),
     });
+    return response.data;
+  }
+
+  // MARC UNIMARC load (server-side parsing, batch preview). source_id optional for load; required for import.
+  async uploadUnimarc(file: File, sourceId?: string | number | null): Promise<EnqueueResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await this.client.post<EnqueueResult>('/items/load-marc', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      params: sourceId != null ? { source_id: sourceId } : undefined,
+    });
+
+    return response.data;
+  }
+
+  // Import one or all records from an UNIMARC batch
+  async importMarcBatch(
+    batchId: string,
+    recordId?: number,
+    sourceId?: string | number | null
+  ): Promise<MarcBatchImportReport> {
+    const params: Record<string, any> = { batch_id: batchId };
+    if (recordId != null) {
+      params.record_id = recordId;
+    }
+    if (sourceId != null) {
+      params.source_id = sourceId;
+    }
+
+    const response = await this.client.post<MarcBatchImportReport>(
+      '/items/import-marc',
+      null,
+      { params }
+    );
     return response.data;
   }
 }

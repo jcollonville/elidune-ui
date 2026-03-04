@@ -78,17 +78,20 @@ export default function UsersPage() {
     {
       key: 'loans',
       header: t('users.loans'),
-      render: (user: UserShort) => (
-        <div className="flex items-center gap-2">
-          <BookMarked className="h-4 w-4 text-gray-400" />
-          <span>{user.nb_loans || 0}</span>
-          {(user.nb_late_loans || 0) > 0 && (
-            <Badge variant="danger" size="sm">
-              {user.nb_late_loans} {t('users.lateLoans')}
-            </Badge>
-          )}
-        </div>
-      ),
+      render: (user: UserShort) => {
+        const loanCount = user.loans?.length ?? user.nb_loans ?? 0;
+        return (
+          <div className="flex items-center gap-2">
+            <BookMarked className="h-4 w-4 text-gray-400" />
+            <span>{loanCount}</span>
+            {(user.nb_late_loans || 0) > 0 && (
+              <Badge variant="danger" size="sm">
+                {user.nb_late_loans} {t('users.lateLoans')}
+              </Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'status',

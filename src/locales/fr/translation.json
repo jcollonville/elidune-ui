@@ -44,7 +44,8 @@
     "active": "Actif",
     "clear": "Effacer",
     "copy": "Copier",
-    "copied": "Copié"
+    "copied": "Copié",
+    "perPage": "Par page"
   },
   "nav": {
     "home": "Accueil",
@@ -254,6 +255,9 @@
     "fillCallNumber": "Remplir avec la suggestion",
     "callNumberAvailable": "Disponible",
     "source": "Source",
+    "selectSource": "Choisir une source",
+    "specimensOptional": "Exemplaires (optionnel)",
+    "specimensOptionalHint": "Vous pouvez ajouter un ou plusieurs exemplaires ; indiquez la source pour chaque exemplaire. L'item et les exemplaires seront créés en une fois.",
     "collection": "Collection",
     "series": "Série",
     "volume": "Volume {{number}}",
@@ -544,7 +548,11 @@
     "isbnRequired": "Veuillez saisir un ISBN pour effectuer la recherche",
     "dataFound": "Données trouvées et champs préremplis !",
     "searchError": "Erreur lors de la recherche Z39.50",
-    "searchButton": "Rechercher en Z39.50"
+    "searchButton": "Rechercher en Z39.50",
+    "sourceRequired": "Veuillez sélectionner une source pour l'import.",
+    "noSources": "Aucune source disponible. Créez une source dans les paramètres.",
+    "sourcesError": "Impossible de charger les sources",
+    "selectSource": "Choisir une source..."
   },
   "importMarc": {
     "title": "Import MARC",

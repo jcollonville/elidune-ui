@@ -138,8 +138,15 @@ function LoanCard({ loan, onRenew, isOverdue = false }: LoanCardProps) {
         <p className="font-medium text-gray-900 dark:text-white truncate">
           {loan.item.title || t('items.notSpecified')}
         </p>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {loan.specimen_identification}
+        <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+          {(() => {
+            const specs = loan.item?.specimens;
+            if (specs?.length) {
+              const spec = specs.find((s) => s.availability === 1) ?? specs[0];
+              return spec?.barcode ?? spec?.id ?? '-';
+            }
+            return loan.specimen_identification ?? '-';
+          })()}
         </p>
         <div className="flex items-center gap-4 mt-2 text-sm">
           <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">

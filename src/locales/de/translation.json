@@ -42,7 +42,8 @@
     "active": "Aktiv",
     "clear": "Löschen",
     "copy": "Kopieren",
-    "copied": "Kopiert"
+    "copied": "Kopiert",
+    "perPage": "Pro Seite"
   },
   "nav": {
     "home": "Startseite",
@@ -252,6 +253,9 @@
     "fillCallNumber": "Mit Vorschlag ausfüllen",
     "callNumberAvailable": "Verfügbar",
     "source": "Quelle",
+    "selectSource": "Quelle auswählen",
+    "specimensOptional": "Exemplare (optional)",
+    "specimensOptionalHint": "Sie können ein oder mehrere Exemplare anlegen; wählen Sie die Quelle pro Exemplar. Der Eintrag und die Exemplare werden in einem Vorgang erstellt.",
     "collection": "Sammlung",
     "series": "Serie",
     "volume": "Band {{number}}",
@@ -525,7 +529,11 @@
     "isbnRequired": "Bitte geben Sie eine ISBN ein, um die Suche durchzuführen",
     "dataFound": "Daten gefunden und Felder ausgefüllt!",
     "searchError": "Fehler bei der Z39.50-Suche",
-    "searchButton": "In Z39.50 suchen"
+    "searchButton": "In Z39.50 suchen",
+    "sourceRequired": "Bitte wählen Sie eine Quelle für den Import.",
+    "noSources": "Keine Quellen verfügbar. Erstellen Sie eine Quelle in den Einstellungen.",
+    "sourcesError": "Quellen konnten nicht geladen werden",
+    "selectSource": "Quelle auswählen..."
   },
   "importMarc": {
     "title": "MARC Import",

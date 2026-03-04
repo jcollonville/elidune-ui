@@ -21,7 +21,7 @@ import { buildSuggestedCallNumber, validateCallNumber } from '@/utils/callNumber
 import { useAuth } from '@/contexts/AuthContext';
 import { canManageItems, type MediaType } from '@/types';
 import api from '@/services/api';
-import type { Item, Specimen, Author } from '@/types';
+import type { Item, Specimen, Author, Source } from '@/types';
 import { useTranslation } from 'react-i18next';
 import { LANG_OPTIONS, FUNCTION_OPTIONS, PUBLIC_TYPE_OPTIONS, STATUS_OPTIONS, getCodeLabel } from '@/utils/codeLabels';
 import type { MediaTypeOption } from '@/types';
@@ -555,9 +555,9 @@ function SpecimenCard({ specimen, canManage, onEdit, onDelete }: SpecimenCardPro
       {borrowStatusLabel != null && (
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('items.borrowStatus')}: {t(borrowStatusLabel)}</p>
       )}
-      {specimen.source_name && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t('items.source')}: {specimen.source_name}</p>
-      )}
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        {t('items.source')}: {specimen.source_name ?? '—'}
+      </p>
     </div>
   );
 }
@@ -902,13 +902,19 @@ interface AddSpecimenFormProps {
 function AddSpecimenForm({ item, onSuccess }: AddSpecimenFormProps) {
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const [sources, setSources] = useState<Source[]>([]);
   const suggestedCallNumber = getSuggestedCallNumberFromItem(item);
   const [formData, setFormData] = useState({
     barcode: '',
     call_number: '',
     volume_designation: '',
     borrow_status: '' as string,
+    source_id: '',
   });
+
+  useEffect(() => {
+    api.getSources(false).then(setSources).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -921,6 +927,7 @@ function AddSpecimenForm({ item, onSuccess }: AddSpecimenFormProps) {
         call_number: formData.call_number || undefined,
         volume_designation: formData.volume_designation || undefined,
         borrow_status: formData.borrow_status ? parseInt(formData.borrow_status, 10) : undefined,
+        source_id: formData.source_id || undefined,
       });
       onSuccess();
     } catch (error) {
@@ -950,6 +957,24 @@ function AddSpecimenForm({ item, onSuccess }: AddSpecimenFormProps) {
         onChange={(e) => setFormData({ ...formData, volume_designation: e.target.value })}
         placeholder="e.g. t. 2"
       />
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          {t('items.source')}
+        </label>
+        <select
+          value={formData.source_id}
+          onChange={(e) => setFormData({ ...formData, source_id: e.target.value })}
+          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+        >
+          <option value="">{t('items.selectSource')}</option>
+          {sources.map((src) => (
+            <option key={src.id} value={src.id}>
+              {src.name || src.id}
+              {src.default ? ` (${t('importMarc.default')})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           {t('items.borrowStatus')}
@@ -985,6 +1010,7 @@ interface EditSpecimenFormProps {
 function EditSpecimenForm({ item, specimen, onSuccess }: EditSpecimenFormProps) {
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const [sources, setSources] = useState<Source[]>([]);
   const suggestedCallNumber = getSuggestedCallNumberFromItem(item);
   const [formData, setFormData] = useState({
     barcode: specimen.barcode || '',
@@ -994,7 +1020,12 @@ function EditSpecimenForm({ item, specimen, onSuccess }: EditSpecimenFormProps) 
     place: specimen.place != null ? String(specimen.place) : '',
     notes: specimen.notes || '',
     price: specimen.price || '',
+    source_id: specimen.source_id || '',
   });
+
+  useEffect(() => {
+    api.getSources(false).then(setSources).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1010,6 +1041,7 @@ function EditSpecimenForm({ item, specimen, onSuccess }: EditSpecimenFormProps) 
         place: formData.place ? parseInt(formData.place, 10) : undefined,
         notes: formData.notes || undefined,
         price: formData.price || undefined,
+        source_id: formData.source_id || undefined,
       });
       onSuccess();
     } catch (error) {
@@ -1040,6 +1072,24 @@ function EditSpecimenForm({ item, specimen, onSuccess }: EditSpecimenFormProps) 
         onChange={(e) => setFormData({ ...formData, volume_designation: e.target.value })}
         placeholder="e.g. t. 2"
       />
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          {t('items.source')}
+        </label>
+        <select
+          value={formData.source_id}
+          onChange={(e) => setFormData({ ...formData, source_id: e.target.value })}
+          className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+        >
+          <option value="">{t('items.selectSource')}</option>
+          {sources.map((src) => (
+            <option key={src.id} value={src.id}>
+              {src.name || src.id}
+              {src.default ? ` (${t('importMarc.default')})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           {t('items.borrowStatus')}

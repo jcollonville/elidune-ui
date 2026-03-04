@@ -56,8 +56,11 @@ export interface UserShort {
   lastname?: string;
   account_type?: string;
   public_type?: number;
+  /** @deprecated prefer counting loans.length (specimens) */
   nb_loans?: number;
   nb_late_loans?: number;
+  /** When present, number of emprunts = loans.length (one loan = one specimen) */
+  loans?: Loan[];
 }
 
 export interface LoginRequest {
@@ -214,6 +217,16 @@ export interface Item {
   marc_record?: unknown;
 }
 
+/** Simplified specimen as returned in ItemShort.specimens */
+export interface SpecimenShort {
+  id: string;
+  barcode?: string | null;
+  call_number?: string | null;
+  borrow_status?: number | null;
+  source_name?: string | null;
+  availability?: number | null;
+}
+
 export interface ItemShort {
   id: string;
   media_type?: MediaType | string | null;
@@ -224,8 +237,8 @@ export interface ItemShort {
   is_local?: number | null;
   is_valid?: number | null;
   archived_at?: string | null;
-  nb_specimens?: number | null;
-  nb_available?: number | null;
+  /** Simplified list of specimens (replaces nb_specimens / nb_available) */
+  specimens?: SpecimenShort[];
   author?: Author | null;
   source_name?: string | null;
 }
@@ -247,6 +260,13 @@ export interface Specimen {
   archived_at?: string | null;
   source_name?: string | null;
   availability?: number | null;
+}
+
+/** Specimen data when creating an item in one request (POST /items with specimens) */
+export interface CreateItemSpecimenInput {
+  barcode?: string | null;
+  call_number?: string | null;
+  source_id: string;
 }
 
 /** Payload for POST /items/{id}/specimens */
@@ -410,6 +430,30 @@ export interface ImportReport {
 export interface ImportResult<T> {
   item: T;
   import_report: ImportReport;
+}
+
+// UNIMARC batch upload / import
+export interface EnqueueResult {
+  /** Unique batch identifier in Redis (stringified i64) */
+  batch_id: string;
+  /** Lightweight preview of records in this batch */
+  items: ItemShort[];
+}
+
+export interface MarcBatchImportError {
+  /** Redis key of the failing record: marc:record:<batch_id>:<id> */
+  record_key: string;
+  /** Human‑readable error message */
+  error: string;
+}
+
+export interface MarcBatchImportReport {
+  /** Batch identifier (stringified i64) */
+  batch_id: string;
+  /** Number of successfully imported records */
+  imported: number;
+  /** Detailed list of per‑record errors, if any */
+  failed: MarcBatchImportError[];
 }
 
 export interface DuplicateConfirmationRequired {

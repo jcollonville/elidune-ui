@@ -42,7 +42,8 @@
     "active": "Active",
     "clear": "Clear",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "perPage": "Per page"
   },
   "nav": {
     "home": "Home",
@@ -252,6 +253,9 @@
     "fillCallNumber": "Fill with suggested",
     "callNumberAvailable": "Available",
     "source": "Source",
+    "selectSource": "Select source",
+    "specimensOptional": "Copies (optional)",
+    "specimensOptionalHint": "You can add one or more copies; select the source for each. The item and copies will be created in one go.",
     "collection": "Collection",
     "series": "Series",
     "volume": "Volume {{number}}",
@@ -525,7 +529,11 @@
     "isbnRequired": "Please enter an ISBN to perform the search",
     "dataFound": "Data found and fields prefilled!",
     "searchError": "Error during Z39.50 search",
-    "searchButton": "Search in Z39.50"
+    "searchButton": "Search in Z39.50",
+    "sourceRequired": "Please select a source for import.",
+    "noSources": "No sources available. Create a source in settings.",
+    "sourcesError": "Failed to load sources",
+    "selectSource": "Select a source..."
   },
   "importMarc": {
     "title": "MARC Import",

@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback, Fragment, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Buffer } from 'buffer';
-import iconv from 'iconv-lite';
 import {
   Upload,
   FileText,
@@ -10,11 +8,8 @@ import {
   AlertCircle,
   Loader2,
   ScanLine,
-  CheckCircle,
-  Trash2,
   Download,
   X,
-  Settings2,
   ChevronDown,
   ChevronRight,
   Plus,
@@ -22,7 +17,14 @@ import {
 import { Card, Button, Badge, Input, Modal } from '@/components/common';
 import api from '@/services/api';
 import { getApiErrorMessage } from '@/utils/apiError';
-import type { Author, MediaType, Source, ImportReport, DuplicateConfirmationRequired } from '@/types';
+import type {
+  Author,
+  MediaType,
+  Source,
+  ImportReport,
+  DuplicateConfirmationRequired,
+  ItemShort,
+} from '@/types';
 import type { AxiosError } from 'axios';
 
 // Helper function to get translation key for media type
@@ -66,6 +68,8 @@ export interface MarcFieldMapping {
 
 interface ParsedRecord {
   id: string;
+  /** Index of the record inside the uploaded batch (0-based) when using server-side UNIMARC upload */
+  recordIndex?: number;
   title1?: string;
   title2?: string;
   identification?: string;
@@ -85,6 +89,8 @@ interface ParsedRecord {
   error?: string;
   importedId?: string;
   importReport?: ImportReport;
+  /** When record comes from UNIMARC upload (server), full item for display (e.g. specimens) */
+  itemShort?: ItemShort;
 }
 
 type MarcFormat = 'UNIMARC' | 'MARC21';
@@ -166,67 +172,7 @@ function buildSpecimenFrom9xx(record: ParsedRecord): { barcode: string; call_num
   return { barcode: barcode || `IMPORT-${Date.now()}`, call_number: call_number || undefined };
 }
 
-/** Parse raw_fields into rows for preview table (tag, indicators, subfields, value) */
-function rawFieldsToDisplayRows(rawFields: Map<string, string[]>): MarcFieldDisplay[] {
-  const rows: MarcFieldDisplay[] = [];
-  const tags = Array.from(rawFields.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  for (const tag of tags) {
-    const values = rawFields.get(tag) ?? [];
-    const isControl = parseInt(tag, 10) < 10;
-    for (const v of values) {
-      if (isControl) {
-        rows.push({ tag, indicators: '-', subfieldsFormatted: '-', value: v.trim() });
-      } else {
-        const ind1 = v.length > 0 ? (v[0] === ' ' ? '#' : v[0]) : '#';
-        const ind2 = v.length > 1 ? (v[1] === ' ' ? '#' : v[1]) : '#';
-        const indicators = `${ind1}${ind2}`;
-        const rest = v.length > 2 ? v.substring(2) : '';
-        const subfieldParts: string[] = [];
-        const valueParts: string[] = [];
-        const parts = rest.split(SUBFIELD_DELIMITER);
-        for (let i = 1; i < parts.length; i++) {
-          const p = parts[i];
-          if (p.length >= 1) {
-            const code = p[0];
-            const val = p.substring(1).trim();
-            subfieldParts.push(`$${code}`);
-            valueParts.push(val);
-          }
-        }
-        rows.push({
-          tag,
-          indicators,
-          subfieldsFormatted: subfieldParts.join(' ') || '-',
-          value: valueParts.join(' | ') || rest.trim(),
-        });
-      }
-    }
-  }
-  return rows;
-}
-
-/** Build MARC mapping structure for API (tag + subfields object) */
-function recordToApiMapping(record: ParsedRecord): MarcFieldMapping[] {
-  const out: MarcFieldMapping[] = [];
-  for (const [tag, values] of Array.from(record.raw_fields.entries()).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))) {
-    const isControl = parseInt(tag, 10) < 10;
-    for (const v of values) {
-      if (isControl) {
-        out.push({ tag, value: v.trim() });
-      } else {
-        const subfields: Record<string, string> = {};
-        const rest = v.length > 2 ? v.substring(2) : '';
-        const parts = rest.split(SUBFIELD_DELIMITER);
-        for (let i = 1; i < parts.length; i++) {
-          const p = parts[i];
-          if (p.length >= 1) subfields[p[0]] = p.substring(1).trim();
-        }
-        out.push({ tag, indicators: v.length >= 2 ? v.substring(0, 2) : undefined, subfields: Object.keys(subfields).length ? subfields : undefined, value: rest.trim() });
-      }
-    }
-  }
-  return out;
-}
+// (rawFieldsToDisplayRows and recordToApiMapping removed – expanded rows now show item/specimen details only)
 
 // Parse author from MARC field
 function parseAuthor(fieldData: string, delimiter = '\x1F'): Author {
@@ -378,321 +324,19 @@ function buildRecordFromFields(
   return record;
 }
 
-/** Convert marcjs Record to our raw_fields Map (control: tag->[value]; data: tag->[ind1+ind2+$c+val...]) */
-function marcRecordToRawFields(fields: (string | string[])[]): Map<string, string[]> {
-  const rawFields = new Map<string, string[]>();
-  for (const field of fields) {
-    const tag = String(field[0]);
-    const isControl = parseInt(tag, 10) < 10;
-    if (isControl) {
-      const value = field[1] as string;
-      const arr = rawFields.get(tag) ?? [];
-      arr.push(value ?? '');
-      rawFields.set(tag, arr);
-    } else {
-      const ind = (field[1] as string) ?? '  ';
-      const ind1 = ind[0] ?? ' ';
-      const ind2 = ind[1] ?? ' ';
-      let str = ind1 + ind2;
-      for (let i = 2; i < field.length - 1; i += 2) {
-        const code = String(field[i]);
-        const val = String(field[i + 1] ?? '');
-        str += SUBFIELD_DELIMITER + code + val;
-      }
-      const arr = rawFields.get(tag) ?? [];
-      arr.push(str);
-      rawFields.set(tag, arr);
-    }
-  }
-  return rawFields;
-}
+// (client-side marcRecordToRawFields removed – server now parses UNIMARC)
 
-/** Detect MARC format from fields (UNIMARC often has 200, MARC21 has 245) */
-function detectMarcFormat(_leader: string, rawFields: Map<string, string[]>): MarcFormat {
-  if (rawFields.has('200') && !rawFields.has('245')) return 'UNIMARC';
-  if (rawFields.has('245')) return 'MARC21';
-  if (rawFields.has('100') && rawFields.get('100')?.[0]?.length === 40) return 'UNIMARC';
-  return 'MARC21';
-}
+// (client-side MARC format detection removed – server now parses UNIMARC)
 
 /** Encoding detected per record for UNIMARC (Guide + field 100 + heuristic) */
 type RecordEncoding = 'utf-8' | 'iso-8859-1' | 'iso-5426' | 'iso-6937';
 
-const SUBFIELD_MARKER = '\x1F';
+// SUBFIELD_MARKER no longer needed now that UNIMARC parsing is server-side
 
-/** Extract subfield $a from first field 100 (raw format: ind1+ind2 + \x1F + code + value ...) */
-function getField100SubfieldA(rawFields: Map<string, string[]>): string | null {
-  const raw100 = rawFields.get('100')?.[0];
-  if (!raw100) return null;
-  const idx = raw100.indexOf(SUBFIELD_MARKER + 'a');
-  if (idx === -1) return null;
-  const after = raw100.slice(idx + 2);
-  const end = after.indexOf(SUBFIELD_MARKER);
-  return end === -1 ? after : after.slice(0, end);
-}
 
-/**
- * Detect encoding for one UNIMARC/MARC record (priority: Guide byte 9 → field 100 $a pos 26–28 → heuristic).
- * A: Byte at index 9 === 0x61 ('a') → UTF-8.
- * B: Field 100 $a positions 26–28: "50 " → UTF-8, "01" → ISO 5426, "02" → ISO 6937.
- * C: Try UTF-8; on invalid sequence use ISO-8859-1.
- */
-function detectRecordEncoding(rawRecord: Uint8Array): RecordEncoding {
-  if (rawRecord.length <= 9) return 'utf-8';
+// (client-side ISO 2709 record parser removed – server now parses UNIMARC)
 
-  // A. Guide (position 9): 0x61 = explicit UTF-8
-  if (rawRecord[9] === 0x61) return 'utf-8';
-
-  // B. Field 100 $a positions 26–28: need to parse record with a tentative decode (directory is ASCII-safe)
-  let decodedForParse: string;
-  try {
-    decodedForParse = new TextDecoder('utf-8', { fatal: true }).decode(rawRecord);
-  } catch {
-    decodedForParse = iconv.decode(Buffer.from(rawRecord), 'iso-8859-1');
-  }
-  try {
-    const recordBuf = Buffer.from(decodedForParse, 'utf8');
-    const marcRecord = parseISO2709Record(recordBuf);
-    const rawFields = marcRecordToRawFields(marcRecord.fields);
-    const field100a = getField100SubfieldA(rawFields);
-    if (field100a && field100a.length >= 28) {
-      const pos26_28 = field100a.slice(26, 28);
-      console.log("pos26_28 => ", pos26_28);
-      if (pos26_28 === '50 ') return 'utf-8';
-      if (pos26_28 === '01') return 'iso-5426';
-      if (pos26_28 === '02') return 'iso-6937';
-    }
-  } catch {
-    // ignore parse errors, fall through to heuristic
-  }
-  // C. Heuristic: try UTF-8; on invalid sequence use ISO-8859-1
-  try {
-    new TextDecoder('utf-8', { fatal: true }).decode(rawRecord);
-    return 'utf-8';
-  } catch {
-    return 'iso-8859-1';
-  }
-}
-
-/**
- * Complete ISO 5426 table (G1 set).
- * Mapping based on NF Z 44-000 and BnF specifications.
- */
-const ISO5426_CORRECT: Record<number, number> = {
-  // --- Special characters (0xA1 to 0xBF) ---
-  0xa1: 0x0141, // Ł (capital L with stroke)
-  0xa2: 0x00d8, // Ø
-  0xa3: 0x0110, // Đ (capital D with stroke)
-  0xa4: 0x00de, // Þ (capital thorn)
-  0xa5: 0x00c6, // Æ
-  0xa6: 0x0152, // Œ
-  0xa7: 0x02b9, // Prime (modifier letter)
-  0xa8: 0x00b7, // Middle dot
-  0xa9: 0x266d, // Flat sign
-  0xaa: 0x00ae, // ®
-  0xab: 0x00b1, // ±
-  0xac: 0x01a0, // Ơ (capital O with horn)
-  0xad: 0x01af, // Ư (capital U with horn)
-  0xae: 0x02bc, // Apostrophe (modifier letter)
-  0xb1: 0x0142, // ł (small l with stroke)
-  0xb2: 0x00f8, // ø
-  0xb3: 0x0111, // đ
-  0xb4: 0x00fe, // þ
-  0xb5: 0x00e6, // æ (small ae ligature)
-  0xb6: 0x0153, // œ
-  0xb7: 0x02ba, // Double prime
-  0xb8: 0x0131, // ı (dotless i)
-  0xb9: 0x00a3, // £
-  0xba: 0x00f0, // ð (eth)
-  0xbc: 0x01a1, // ơ
-  0xbd: 0x01b0, // ư
-
-  // --- Simple combining diacritics (0xC1 to 0xCF) ---
-  // Reminder: in the byte stream, they appear *before* the base letter.
-  0xc1: 0x0300, // Grave accent `
-  0xc2: 0x0301, // Acute accent ´
-  0xc3: 0x0302, // Circumflex accent ^
-  0xc4: 0x0303, // Tilde ~
-  0xc5: 0x0304, // Macron (overline)
-  0xc6: 0x0306, // Breve ̆
-  0xc7: 0x0307, // Dot above ̇
-  0xc8: 0x0308, // Diaeresis / umlaut ̈
-  0xc9: 0x030c, // Caron / háček ̌
-  0xca: 0x030a, // Ring above ̊
-  0xcb: 0x0327, // Cedilla ̧
-  0xcc: 0x0328, // Ogonek ̨
-  0xcd: 0x0323, // Dot below ̣
-  0xce: 0x0324, // Diaeresis below ̤
-  0xcf: 0x0313, // Smooth breathing (comma above)
-
-  // --- Additional combining diacritics (0xD0 to 0xDF) ---
-  0xd0: 0x030b, // Double acute accent above
-  0xd1: 0x0332, // Low line (macron below)
-  0xd2: 0x0325, // Ring below
-  0xd3: 0x032e, // Breve below
-  0xd4: 0x030d, // Vertical line above
-  0xd5: 0x031c, // Half ring below (left)
-  0xd6: 0x0326, // Comma below
-  0xd7: 0x0310, // Candrabindu
-  0xd8: 0x0317, // Acute accent below
-  0xd9: 0x0316, // Grave accent below
-
-  // --- “Double” diacritics (0xE1 to 0xE4) ---
-  // These accents normally span two characters.
-  0xe1: 0x0361, // Double ligature mark above (e.g. t͡s)
-  0xe2: 0x0360, // Double tilde above
-  0xe8: 0x0333, // Double low line
-};
-
-/**
- * Optimized decoding function.
- * Handles the critical case of input order accent + letter → output letter + accent.
- */
-function decodeIso5426ToUnicode(raw: Uint8Array): string {
-  const out: number[] = [];
-
-  for (let i = 0; i < raw.length; i++) {
-    const b = raw[i];
-
-    // Check if this byte is a diacritic (range 0xC1–0xDF and 0xE1+)
-    if ((b >= 0xc1 && b <= 0xcf) || (b >= 0xd0 && b <= 0xdf) || (b >= 0xe1 && b <= 0xe8)) {
-      const combiningMark = ISO5426_CORRECT[b];
-      
-      if (i + 1 < raw.length) {
-        const nextByte = raw[i + 1];
-        
-        // Decode the base character (either ASCII or a special G1 character)
-        let baseChar = nextByte;
-        if (nextByte > 0x7f && ISO5426_CORRECT[nextByte]) {
-            baseChar = ISO5426_CORRECT[nextByte];
-        }
-
-        out.push(baseChar); // Base letter first
-        if (combiningMark) out.push(combiningMark); // Accent after
-        
-        i++; // Skip the base character we just consumed
-      }
-    } 
-    // Standard characters (ASCII)
-    else if (b <= 0x7f) {
-      out.push(b);
-    } 
-    // G1 special characters (non-combining, such as Æ, Œ, ł)
-    else {
-      const cp = ISO5426_CORRECT[b];
-      out.push(cp !== undefined ? cp : b);
-    }
-  }
-
-  // Convert to string and normalize to NFC to merge accents with their base letters.
-  // Example: 'e' + '\u0301' becomes 'é' (single code point).
-  return String.fromCodePoint(...out).normalize('NFC');
-}
-
-/** Decode raw record bytes with the given encoding; output is always valid Unicode (UTF-8 when serialized). */
-function decodeRecord(rawRecord: Uint8Array, encoding: RecordEncoding): string {
-  let decoded: string;
-  if (encoding === 'utf-8') {
-    try {
-      decoded = new TextDecoder('utf-8', { fatal: true }).decode(rawRecord);
-    } catch {
-      decoded = iconv.decode(Buffer.from(rawRecord), 'iso-8859-1');
-    }
-  } else if (encoding === 'iso-5426') {
-    decoded = decodeIso5426ToUnicode(rawRecord);
-  } else if (encoding === 'iso-6937') {
-    const buf = Buffer.from(rawRecord);
-    try {
-      decoded = iconv.decode(buf, 'iso6937');
-    } catch {
-      decoded = iconv.decode(buf, 'iso-8859-1');
-    }
-  } else {
-    decoded = iconv.decode(Buffer.from(rawRecord), 'iso-8859-1');
-  }
-  return decoded.normalize('NFC');
-}
-
-/** ISO 2709 single-record parser (same logic as marcjs, browser-safe, no Node stream). Returns { leader, fields }. */
-function parseISO2709Record(recordBuf: Buffer): { leader: string; fields: (string | string[])[] } {
-  const leader = recordBuf.toString('utf8', 0, 24);
-  const directoryLen = parseInt(recordBuf.toString('utf8', 12, 17), 10) - 25;
-  const numberOfTag = directoryLen / 12;
-  const fields: (string | string[])[] = [];
-  for (let i = 0; i < numberOfTag; i += 1) {
-    const off = 24 + i * 12;
-    const tag = recordBuf.toString('utf8', off, off + 3);
-    const len = parseInt(recordBuf.toString('utf8', off + 3, off + 7), 10) - 1;
-    const pos = parseInt(recordBuf.toString('utf8', off + 7, off + 12), 10) + 25 + directoryLen;
-    const value = recordBuf.toString('utf8', pos, pos + len);
-    const parts: string[] = [tag];
-    if (parseInt(tag, 10) < 10) {
-      parts.push(value);
-    } else {
-      parts.push(value.length >= 2 ? value.substring(0, 2) : '  ');
-      const rest = value.length > 2 ? value.substring(2) : '';
-      if (rest.indexOf('\x1F') !== -1) {
-        const values = rest.split('\x1F');
-        for (let j = 1; j < values.length; j += 1) {
-          const v = values[j];
-          if (v.length >= 1) {
-            parts.push(v.substring(0, 1));
-            parts.push(v.substring(1));
-          }
-        }
-      }
-    }
-    fields.push(parts);
-  }
-  return { leader, fields };
-}
-
-// ISO 2709 Parser. Structure: Label (24), Directory (12-char entries), Data (FT=0x1E, RT=0x1D).
-// Per-record encoding detection for UNIMARC: Guide (byte 9) → field 100 $a (26–28) → heuristic.
-function parseISO2709(arrayBuffer: ArrayBuffer): { records: ParsedRecord[]; detectedFormat: MarcFormat | null } {
-  const records: ParsedRecord[] = [];
-  let detectedFormat: MarcFormat | null = null;
-
-  const buf = new Uint8Array(arrayBuffer);
-  const RT = 0x1D;
-  let start = 0;
-  let index = 0;
-
-  while (start < buf.length) {
-    const pos = buf.indexOf(RT, start);
-    if (pos === -1) break;
-    const rawChunk = buf.subarray(start, pos);
-    start = pos + 1;
-    if (rawChunk.length < 24) {
-      index += 1;
-      continue;
-    }
-
-    try {
-      const recordEncoding = detectRecordEncoding(rawChunk);
-      const decoded = decodeRecord(rawChunk, recordEncoding);
-      const recordBuf = Buffer.from(decoded, 'utf8');
-
-      const leader = recordBuf.toString('utf8', 0, 24);
-      const baseAddress = parseInt(leader.substring(12, 17), 10);
-      if (baseAddress < 24 || baseAddress > recordBuf.length) {
-        console.warn('Invalid base address in record', index);
-        index += 1;
-        continue;
-      }
-      const marcRecord = parseISO2709Record(recordBuf);
-      const rawFields = marcRecordToRawFields(marcRecord.fields);
-      if (detectedFormat === null) detectedFormat = detectMarcFormat(marcRecord.leader, rawFields);
-      const record = buildRecordFromFields(rawFields, marcRecord.leader, index, recordEncoding);
-      if (record.title1) records.push(record);
-    } catch (e) {
-      console.error('Error parsing ISO 2709 record', index, e);
-    }
-    index += 1;
-  }
-
-  return { records, detectedFormat };
-}
+// (client-side ISO 2709 parser removed in favor of server-side UNIMARC upload)
 
 // MARCXML Parser
 function parseMARCXML(content: string): ParsedRecord[] {
@@ -778,10 +422,7 @@ export default function ImportIsoPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  // Options state (always visible)
-  const [showOptions, setShowOptions] = useState(true);
-
-  // Sources (for specimen creation)
+  // Sources (for specimen creation) — no default selection
   const [sources, setSources] = useState<Source[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [showAddSource, setShowAddSource] = useState(false);
@@ -792,6 +433,7 @@ export default function ImportIsoPage() {
   // File state
   const [fileName, setFileName] = useState<string>('');
   const [records, setRecords] = useState<ParsedRecord[]>([]);
+  const [batchId, setBatchId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [parseError, setParseError] = useState('');
 
@@ -827,12 +469,7 @@ export default function ImportIsoPage() {
       setSourcesError('');
       const data = await api.getSources(false);
       setSources(data);
-      const defaultSource = data.find(s => s.default);
-      setSelectedSourceId((prev) => {
-        if (defaultSource) return defaultSource.id;
-        if (data.length > 0 && prev === null) return data[0].id;
-        return prev;
-      });
+      // Do not preselect any source; user must choose for import
     } catch (e) {
       setSourcesError(t('importMarc.sourcesError'));
     }
@@ -860,28 +497,67 @@ export default function ImportIsoPage() {
     }
   };
 
-  const parseFile = useCallback(async (file: File): Promise<{ records: ParsedRecord[]; detectedFormat: MarcFormat | null }> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
+  const parseFile = useCallback(
+    async (
+      file: File,
+      sourceId: string | null
+    ): Promise<{ records: ParsedRecord[]; detectedFormat: MarcFormat | null; batchId?: string | null }> => {
+      // Detect MARCXML by content sniffing (preserve existing behavior)
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
 
-    // Sniff format: if first non-whitespace char is '<' → MARCXML, otherwise assume ISO 2709.
-    let i = 0;
-    // Skip UTF-8 BOM if present
-    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-      i = 3;
-    }
-    while (i < bytes.length && (bytes[i] === 0x20 || bytes[i] === 0x09 || bytes[i] === 0x0a || bytes[i] === 0x0d)) {
-      i += 1;
-    }
-    const first = i < bytes.length ? bytes[i] : 0;
-    const isXml = first === 0x3c; // '<'
+      let i = 0;
+      // Skip UTF-8 BOM if present
+      if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+        i = 3;
+      }
+      while (
+        i < bytes.length &&
+        (bytes[i] === 0x20 || bytes[i] === 0x09 || bytes[i] === 0x0a || bytes[i] === 0x0d)
+      ) {
+        i += 1;
+      }
+      const first = i < bytes.length ? bytes[i] : 0;
+      const isXml = first === 0x3c; // '<'
 
-    if (isXml) {
-      const content = new TextDecoder('utf-8').decode(arrayBuffer);
-      return { records: parseMARCXML(content), detectedFormat: null };
-    }
-    return parseISO2709(arrayBuffer);
-  }, []);
+      // For MARCXML we keep client-side parsing as before
+      if (isXml) {
+        const content = new TextDecoder('utf-8').decode(arrayBuffer);
+        return { records: parseMARCXML(content), detectedFormat: null };
+      }
+
+      // For UNIMARC ISO 2709 we delegate parsing to the backend (source_id optional for load)
+      const enqueueResult = await api.uploadUnimarc(file, sourceId ?? undefined);
+      const uploadedItems: ItemShort[] = enqueueResult.items;
+
+      const recordsFromItems: ParsedRecord[] = uploadedItems.map((item, index) => ({
+        id: `record-${index}-${Date.now()}`,
+        recordIndex: index,
+        title1: item.title ?? undefined,
+        title2: undefined,
+        identification: normalizeIsbn(item.isbn ?? undefined),
+        authors1: item.author ? [item.author] : undefined,
+        authors2: undefined,
+        publication_date: item.date ?? undefined,
+        edition_name: undefined,
+        edition_place: undefined,
+        abstract_: undefined,
+        keywords: undefined,
+        subject: undefined,
+        media_type: (item.media_type ?? undefined) as MediaType | undefined,
+        raw_fields: new Map<string, string[]>(),
+        detectedEncoding: undefined,
+        status: 'pending',
+        error: undefined,
+        importedId: undefined,
+        importReport: undefined,
+        itemShort: item,
+      }));
+
+      return { records: recordsFromItems, detectedFormat: 'UNIMARC', batchId: enqueueResult.batch_id };
+    },
+    []
+  );
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -889,24 +565,31 @@ export default function ImportIsoPage() {
 
     setIsLoading(true);
     setParseError('');
+    setBatchId(null);
     setFileName(file.name);
 
     try {
-      const { records: parsed, detectedFormat } = await parseFile(file);
+      const { records: parsed, detectedFormat, batchId: newBatchId } = await parseFile(
+        file,
+        selectedSourceId
+      );
 
       if (parsed.length === 0) {
         setParseError(t('importMarc.noRecordsFound'));
       } else {
         setRecords(parsed);
         setDetectedMarcFormat(detectedFormat);
+        if (newBatchId) {
+          setBatchId(newBatchId);
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error parsing file:', error);
       setParseError(t('importMarc.readError'));
     } finally {
       setIsLoading(false);
     }
-  }, [parseFile, t]);
+  }, [parseFile, selectedSourceId, t]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -920,7 +603,63 @@ export default function ImportIsoPage() {
   }, []);
 
   const handleImportAll = async () => {
-    let pendingRecords = records.filter(r => r.status === 'pending');
+    if (!selectedSourceId) {
+      setParseError(t('importMarc.sourceRequired'));
+      return;
+    }
+    // For server-side UNIMARC batches, import the whole lot in one call
+    if (batchId) {
+      let pendingRecords = records.filter((r) => r.status === 'pending' && r.recordIndex != null);
+      if (pendingRecords.length === 0) return;
+
+      setIsImporting(true);
+      setImportProgress({ current: 0, total: pendingRecords.length });
+      setShowImportErrorList(false);
+
+      try {
+        const report = await api.importMarcBatch(batchId, undefined, selectedSourceId);
+
+        // Map failing record indices → error messages, based on Redis keys marc:record:<batch_id>:<id>
+        const failedByIndex = new Map<number, string>();
+        for (const failed of report.failed) {
+          const parts = failed.record_key.split(':');
+          const idxStr = parts[parts.length - 1];
+          const idx = Number(idxStr);
+          if (!Number.isNaN(idx)) {
+            failedByIndex.set(idx, failed.error);
+          }
+        }
+
+        setRecords((prev) =>
+          prev.map((r) => {
+            if (r.recordIndex == null || r.status !== 'pending') return r;
+            if (failedByIndex.has(r.recordIndex)) {
+              return {
+                ...r,
+                status: 'error' as const,
+                error: failedByIndex.get(r.recordIndex) || t('importMarc.importErrorGeneric'),
+              };
+            }
+            return { ...r, status: 'imported' as const };
+          })
+        );
+
+        setImportProgress({ current: pendingRecords.length, total: pendingRecords.length });
+        if (report.failed.length > 0) {
+          setShowImportErrorList(true);
+        }
+      } catch (error) {
+        console.error('Error importing UNIMARC batch:', error);
+        setParseError(getApiErrorMessage(error, t));
+      } finally {
+        setIsImporting(false);
+      }
+
+      return;
+    }
+
+    // Legacy path (MARCXML client-side parsing): import one by one via /items
+    let pendingRecords = records.filter((r) => r.status === 'pending');
     if (onlyImportWithSpecimen) {
       pendingRecords = pendingRecords.filter(has9xxFields);
     }
@@ -972,12 +711,44 @@ export default function ImportIsoPage() {
   };
 
   const importRecord = async (record: ParsedRecord, options?: { showErrorModal?: boolean }) => {
+    if (!selectedSourceId) {
+      setParseError(t('importMarc.sourceRequired'));
+      return;
+    }
     const showErrorModal = options?.showErrorModal !== false;
     setRecords(prev => prev.map(r =>
       r.id === record.id ? { ...r, status: 'importing' as const } : r
     ));
 
     try {
+      // If we are in UNIMARC batch mode, import this single record by index
+      if (batchId && record.recordIndex != null) {
+        const report = await api.importMarcBatch(batchId, record.recordIndex, selectedSourceId);
+        if (report.imported > 0 && report.failed.length === 0) {
+          setRecords(prev =>
+            prev.map(r =>
+              r.id === record.id ? { ...r, status: 'imported' as const } : r
+            )
+          );
+          return;
+        }
+        const errorMessage =
+          report.failed.map(f => f.error).join(' ; ') || t('importMarc.importErrorGeneric');
+        setRecords(prev =>
+          prev.map(r =>
+            r.id === record.id ? { ...r, status: 'error' as const, error: errorMessage } : r
+          )
+        );
+        if (showErrorModal) {
+          setSingleErrorModal({
+            title: record.title1 || record.identification || t('items.notSpecified'),
+            message: errorMessage,
+          });
+        }
+        return;
+      }
+
+      // Legacy path (MARCXML → /items)
       const { item, import_report } = await api.createItem(buildItemPayload(record));
       if (item.id != null) await completeImportWithItemId(record, item.id, import_report);
     } catch (error) {
@@ -1058,18 +829,17 @@ export default function ImportIsoPage() {
     }
   };
 
-  const handleRemoveRecord = (id: string) => {
-    setRecords(prev => prev.filter(r => r.id !== id));
-  };
-
-  const handleClear = () => {
+  const handleCancel = () => {
     setRecords([]);
     setFileName('');
     setParseError('');
+    setBatchId(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  const showSourceSelect = records.length > 0;
 
   const formatAuthors = (authors?: Author[]) => {
     if (!authors || authors.length === 0) return '-';
@@ -1110,27 +880,6 @@ export default function ImportIsoPage() {
         );
       },
       className: 'w-10',
-    },
-    {
-      key: 'status',
-      header: '',
-      render: (record: ParsedRecord) => {
-        switch (record.status) {
-          case 'imported':
-            return <CheckCircle className="h-5 w-5 text-green-500" />;
-          case 'importing':
-            return <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />;
-          case 'error':
-            return (
-              <span title={record.error}>
-                <AlertCircle className="h-5 w-5 text-red-500" />
-              </span>
-            );
-          default:
-            return <div className="h-5 w-5 rounded-full border-2 border-gray-300 dark:border-gray-600" />;
-        }
-      },
-      className: 'w-12',
     },
     {
       key: 'title',
@@ -1197,26 +946,16 @@ export default function ImportIsoPage() {
       render: (record: ParsedRecord) => (
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           {record.status === 'pending' && (
-            <>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => importRecord(record)}
-                title={t('importMarc.importOne')}
-                leftIcon={<Download className="h-4 w-4" />}
-              >
-                {t('importMarc.import')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleRemoveRecord(record.id)}
-                className="text-gray-400 hover:text-red-500"
-                title={t('common.delete')}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => importRecord(record)}
+              title={t('importMarc.importOne')}
+              leftIcon={<Download className="h-4 w-4" />}
+              disabled={!selectedSourceId}
+            >
+              {t('importMarc.import')}
+            </Button>
           )}
           {record.status === 'importing' && (
             <span className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
@@ -1225,24 +964,15 @@ export default function ImportIsoPage() {
             </span>
           )}
           {record.status === 'error' && (
-            <>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => importRecord(record)}
-                leftIcon={<Download className="h-4 w-4" />}
-              >
-                {t('importMarc.import')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleRemoveRecord(record.id)}
-                className="text-gray-400 hover:text-red-500"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => importRecord(record)}
+              leftIcon={<Download className="h-4 w-4" />}
+              disabled={!selectedSourceId}
+            >
+              {t('importMarc.import')}
+            </Button>
           )}
           {record.status === 'imported' && record.importedId && (
             <Button
@@ -1272,132 +1002,110 @@ export default function ImportIsoPage() {
         </p>
       </div>
 
-      {/* Import options + file upload (always visible) */}
-      <Card>
-        {/* Options panel */}
-        <div className="mb-4">
-          <button
-            type="button"
-            onClick={() => setShowOptions(!showOptions)}
-            className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+      {/* Drop zone: only when no file loaded */}
+      {records.length === 0 && (
+        <Card>
+          <div
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:border-amber-400 dark:hover:border-amber-500 transition-colors cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
           >
-            <Settings2 className="h-4 w-4" />
-            {t('importMarc.importOptions')}
-            <span className={`transition-transform ${showOptions ? 'rotate-180' : ''}`}>▼</span>
-          </button>
-
-          {showOptions && (
-            <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Source selector (for specimen creation) */}
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    {t('importMarc.source')}
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={selectedSourceId ?? ''}
-                      onChange={(e) => setSelectedSourceId(e.target.value || null)}
-                      className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">{t('importMarc.noSource')}</option>
-                      {sources.map((source) => (
-                        <option key={source.id} value={source.id}>
-                          {source.name || source.key || `Source ${source.id}`}
-                          {source.default ? ` (${t('importMarc.default')})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setShowAddSource((v) => !v)}
-                      leftIcon={<Plus className="h-4 w-4" />}
-                    >
-                      {t('importMarc.addSource')}
-                    </Button>
-                  </div>
-                  {showAddSource && (
-                    <form onSubmit={handleAddSource} className="mt-3 flex flex-wrap items-end gap-2">
-                      <Input
-                        value={newSourceName}
-                        onChange={(e) => setNewSourceName(e.target.value)}
-                        placeholder={t('importMarc.newSourceName')}
-                        className="flex-1 min-w-[180px]"
-                        autoFocus
-                      />
-                      <Button type="submit" size="sm" isLoading={addSourceLoading} disabled={!newSourceName.trim()}>
-                        {t('common.add')}
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => { setShowAddSource(false); setNewSourceName(''); }}>
-                        {t('common.cancel')}
-                      </Button>
-                    </form>
-                  )}
-                  {sourcesError && (
-                    <p className="mt-2 text-sm text-red-600 dark:text-red-400">{sourcesError}</p>
-                  )}
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {t('importMarc.sourceHint')}
-                  </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={getAcceptedExtensions()}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            {isLoading ? (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-12 w-12 text-amber-500 animate-spin" />
+                <p className="text-gray-600 dark:text-gray-300">{t('importMarc.analyzing')}</p>
+              </div>
+            ) : (
+              <>
+                <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+                  <FileText className="h-8 w-8 text-amber-600 dark:text-amber-400" />
                 </div>
-              </div>
-
-            </div>
-          )}
-        </div>
-
-        {/* Drop zone */}
-        <div
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:border-amber-400 dark:hover:border-amber-500 transition-colors cursor-pointer"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={getAcceptedExtensions()}
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-
-          {isLoading ? (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-12 w-12 text-amber-500 animate-spin" />
-              <p className="text-gray-600 dark:text-gray-300">{t('importMarc.analyzing')}</p>
-            </div>
-          ) : (
-            <>
-              <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
-                <FileText className="h-8 w-8 text-amber-600 dark:text-amber-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {t('importMarc.dropFile')}
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 mb-4">
-                {t('importMarc.orClickToBrowse')}
-              </p>
-              <div className="flex flex-wrap justify-center gap-2 text-sm" />
-            </>
-          )}
-        </div>
-
-        {parseError && (
-          <div className="mt-4 flex items-center gap-2 text-red-600 dark:text-red-400">
-            <AlertCircle className="h-5 w-5" />
-            {parseError}
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {t('importMarc.dropFile')}
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                  {t('importMarc.orClickToBrowse')}
+                </p>
+              </>
+            )}
           </div>
-        )}
-      </Card>
+          {parseError && (
+            <div className="mt-4 flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertCircle className="h-5 w-5" />
+              {parseError}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Records list */}
       {records.length > 0 && (
         <>
           {/* Stats and actions */}
           <Card>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            {showSourceSelect && (
+              <div className="mb-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {t('importMarc.source')}
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={selectedSourceId ?? ''}
+                    onChange={(e) => setSelectedSourceId(e.target.value || null)}
+                    className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="">{t('importMarc.noSource')}</option>
+                    {sources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.name || source.key || `Source ${source.id}`}
+                        {source.default ? ` (${t('importMarc.default')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowAddSource((v) => !v)}
+                    leftIcon={<Plus className="h-4 w-4" />}
+                  >
+                    {t('importMarc.addSource')}
+                  </Button>
+                </div>
+                {showAddSource && (
+                  <form onSubmit={handleAddSource} className="mt-3 flex flex-wrap items-end gap-2">
+                    <Input
+                      value={newSourceName}
+                      onChange={(e) => setNewSourceName(e.target.value)}
+                      placeholder={t('importMarc.newSourceName')}
+                      className="flex-1 min-w-[180px]"
+                      autoFocus
+                    />
+                    <Button type="submit" size="sm" isLoading={addSourceLoading} disabled={!newSourceName.trim()}>
+                      {t('common.add')}
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => { setShowAddSource(false); setNewSourceName(''); }}>
+                      {t('common.cancel')}
+                    </Button>
+                  </form>
+                )}
+                {sourcesError && (
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">{sourcesError}</p>
+                )}
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {t('importMarc.sourceHint')}
+                </p>
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-gray-400" />
@@ -1418,6 +1126,13 @@ export default function ImportIsoPage() {
                   )}
                 </div>
               </div>
+
+              {parseError && (
+                <div className="mt-4 flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  {parseError}
+                </div>
+              )}
 
               {errorCount > 0 && (
                 <div className="mt-3">
@@ -1464,8 +1179,8 @@ export default function ImportIsoPage() {
                   </label>
                 )}
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" onClick={handleClear}>
-                    {t('common.clear')}
+                  <Button variant="ghost" onClick={handleCancel}>
+                    {t('common.cancel')}
                   </Button>
                   {pendingCount > 0 && !scanMode && (
                     <>
@@ -1473,6 +1188,7 @@ export default function ImportIsoPage() {
                         variant="secondary"
                         onClick={handleStartScanMode}
                         leftIcon={<ScanLine className="h-4 w-4" />}
+                        disabled={!selectedSourceId}
                       >
                         {t('importMarc.importWithScan')}
                       </Button>
@@ -1480,6 +1196,7 @@ export default function ImportIsoPage() {
                         onClick={handleImportAll}
                         isLoading={isImporting}
                         leftIcon={<Download className="h-4 w-4" />}
+                        disabled={!selectedSourceId}
                       >
                         {t('importMarc.importAll', { count: onlyImportWithSpecimen ? records.filter(r => r.status === 'pending' && has9xxFields(r)).length : pendingCount })}
                       </Button>
@@ -1598,88 +1315,183 @@ export default function ImportIsoPage() {
                       {expandedRecordId === record.id && (
                         <tr key={`${record.id}-detail`} className="bg-gray-50 dark:bg-gray-800/50">
                           <td colSpan={columns.length} className="px-4 py-3">
-                            {record.importReport && (
-                              <div className="mb-4 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
-                                <div className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
-                                  {t('importMarc.importReportTitle')}
-                                </div>
-                                <div className="text-sm text-amber-900 dark:text-amber-200">
-                                  {record.importReport.message || record.importReport.action}
-                                  {record.importReport.existing_id != null ? ` (ID: ${record.importReport.existing_id})` : ''}
-                                </div>
-                                {record.importReport.warnings?.length > 0 && (
-                                  <ul className="mt-2 list-disc pl-5 text-sm text-amber-800 dark:text-amber-300 space-y-1">
-                                    {record.importReport.warnings.map((w, idx) => (
-                                      <li key={idx}>{w}</li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
-                            )}
-                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                              {t('importMarc.detectedEncoding', { encoding: record.detectedEncoding ?? 'utf-8' })}
-                            </div>
-                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                              {t('importMarc.rawFields')}
-                            </div>
-                            <table className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-4">
-                              <thead>
-                                <tr className="bg-gray-100 dark:bg-gray-800">
-                                  <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.tag')}</th>
-                                  <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.indicators')}</th>
-                                  <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.subfields')}</th>
-                                  <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.value')}</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                {rawFieldsToDisplayRows(record.raw_fields).map((row, i) => (
-                                  <tr key={i}>
-                                    <td className="px-3 py-2 font-mono text-amber-600 dark:text-amber-400">{row.tag}</td>
-                                    <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400">{row.indicators}</td>
-                                    <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400">{row.subfieldsFormatted}</td>
-                                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-md truncate" title={row.value}>{row.value}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
                             {(() => {
-                              const fields9xx = get9xxRawFields(record.raw_fields);
-                              if (fields9xx.size === 0) return null;
-                              const rows9xx = rawFieldsToDisplayRows(fields9xx);
+                              const itemPayload = buildItemPayload(record);
+                              const specimenPreview = has9xxFields(record) ? buildSpecimenFrom9xx(record) : null;
+                              const selectedSource =
+                                specimenPreview && selectedSourceId
+                                  ? sources.find((s) => s.id === selectedSourceId)
+                                  : null;
+
                               return (
-                                <>
-                                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 mt-4">
-                                    {t('importMarc.fields9xx')}
+                                <div className="space-y-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                                      <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                        {t('importMarc.itemDetails')}
+                                      </h4>
+                                      <dl className="space-y-1 text-sm">
+                                        {record.itemShort?.specimens && record.itemShort.specimens.length > 0 && (
+                                          <div className="flex flex-col gap-1">
+                                            <dt className="text-gray-500 dark:text-gray-400 text-sm font-medium">
+                                              {t('items.specimens')} ({record.itemShort.specimens.length})
+                                            </dt>
+                                            <dd className="flex-1">
+                                              <ul className="space-y-1.5 text-sm">
+                                                {record.itemShort.specimens.map((spec) => {
+                                                  const isAvailable = spec.availability === 0;
+                                                  const isBorrowed = spec.availability === 1;
+                                                  const statusLabel = isAvailable
+                                                    ? t('items.available')
+                                                    : isBorrowed
+                                                      ? t('items.borrowed')
+                                                      : null;
+                                                  return (
+                                                    <li
+                                                      key={spec.id}
+                                                      className="flex flex-wrap items-center gap-2 text-gray-900 dark:text-gray-100"
+                                                    >
+                                                      <span className="font-mono text-xs">{spec.barcode || spec.id}</span>
+                                                      {spec.call_number && (
+                                                        <span className="text-gray-500 dark:text-gray-400">
+                                                          {spec.call_number}
+                                                        </span>
+                                                      )}
+                                                      {spec.source_name && (
+                                                        <span className="text-gray-500 dark:text-gray-400">
+                                                          {spec.source_name}
+                                                        </span>
+                                                      )}
+                                                      {statusLabel != null && (
+                                                        <Badge variant={isAvailable ? 'success' : 'warning'}>
+                                                          {statusLabel}
+                                                        </Badge>
+                                                      )}
+                                                    </li>
+                                                  );
+                                                })}
+                                              </ul>
+                                            </dd>
+                                          </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                          <dt className="w-32 text-gray-500 dark:text-gray-400">{t('items.titleField')} :</dt>
+                                          <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                            {itemPayload.title || t('items.notSpecified')}
+                                          </dd>
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <dt className="w-32 text-gray-500 dark:text-gray-400">{t('items.isbn')} :</dt>
+                                          <dd className="flex-1 text-gray-900 dark:text-gray-100 font-mono">
+                                            {itemPayload.isbn || '-'}
+                                          </dd>
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <dt className="w-32 text-gray-500 dark:text-gray-400">{t('items.authors')} :</dt>
+                                          <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                            {formatAuthors(itemPayload.authors)}
+                                          </dd>
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <dt className="w-32 text-gray-500 dark:text-gray-400">{t('items.publicationDate')} :</dt>
+                                          <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                            {itemPayload.publication_date || '-'}
+                                          </dd>
+                                        </div>
+                                        {itemPayload.media_type && (
+                                          <div className="flex gap-2">
+                                            <dt className="w-32 text-gray-500 dark:text-gray-400">{t('common.type')} :</dt>
+                                            <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                              {t(
+                                                `items.mediaType.${getMediaTypeTranslationKey(
+                                                  itemPayload.media_type as MediaType
+                                                )}`
+                                              )}
+                                            </dd>
+                                          </div>
+                                        )}
+                                        {itemPayload.edition && (
+                                          <>
+                                            <div className="flex gap-2">
+                                              <dt className="w-32 text-gray-500 dark:text-gray-400">
+                                                {t('items.publisher')}
+                                              </dt>
+                                              <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                                {itemPayload.edition.publisher_name || '-'}
+                                              </dd>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <dt className="w-32 text-gray-500 dark:text-gray-400">
+                                                {t('items.placeOfPublication')}
+                                              </dt>
+                                              <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                                {itemPayload.edition.place_of_publication || '-'}
+                                              </dd>
+                                            </div>
+                                          </>
+                                        )}
+                                        {itemPayload.abstract_ && (
+                                          <div className="flex gap-2">
+                                            <dt className="w-32 text-gray-500 dark:text-gray-400">
+                                              {t('items.abstract')}
+                                            </dt>
+                                            <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                              {itemPayload.abstract_}
+                                            </dd>
+                                          </div>
+                                        )}
+                                        {itemPayload.keywords && (
+                                          <div className="flex gap-2">
+                                            <dt className="w-32 text-gray-500 dark:text-gray-400">
+                                              {t('items.keywords')}
+                                            </dt>
+                                            <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                              {itemPayload.keywords}
+                                            </dd>
+                                          </div>
+                                        )}
+                                      </dl>
+                                    </div>
+
+                                    {specimenPreview && (
+                                      <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                          {t('importMarc.specimenDetails')}
+                                        </h4>
+                                        <dl className="space-y-1 text-sm">
+                                          <div className="flex gap-2">
+                                            <dt className="w-32 text-gray-500 dark:text-gray-400">
+                                              {t('specimens.barcode')}
+                                            </dt>
+                                            <dd className="flex-1 text-gray-900 dark:text-gray-100 font-mono">
+                                              {specimenPreview.barcode}
+                                            </dd>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            <dt className="w-32 text-gray-500 dark:text-gray-400">
+                                              {t('specimens.callNumber')}
+                                            </dt>
+                                            <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                              {specimenPreview.call_number || '-'}
+                                            </dd>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            <dt className="w-32 text-gray-500 dark:text-gray-400">
+                                              {t('importMarc.source')}
+                                            </dt>
+                                            <dd className="flex-1 text-gray-900 dark:text-gray-100">
+                                              {selectedSource
+                                                ? selectedSource.name || selectedSource.key || selectedSource.id
+                                                : t('importMarc.noSource')}
+                                            </dd>
+                                          </div>
+                                        </dl>
+                                      </div>
+                                    )}
                                   </div>
-                                  <table className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-4">
-                                    <thead>
-                                      <tr className="bg-gray-100 dark:bg-gray-800">
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.tag')}</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.indicators')}</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.subfields')}</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300">{t('importMarc.preview.value')}</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                      {rows9xx.map((row, i) => (
-                                        <tr key={i}>
-                                          <td className="px-3 py-2 font-mono text-amber-600 dark:text-amber-400">{row.tag}</td>
-                                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400">{row.indicators}</td>
-                                          <td className="px-3 py-2 font-mono text-gray-600 dark:text-gray-400">{row.subfieldsFormatted}</td>
-                                          <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-md truncate" title={row.value}>{row.value}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </>
+                                </div>
                               );
                             })()}
-                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                              {t('importMarc.mappingApi')}
-                            </div>
-                            <pre className="text-xs font-mono bg-gray-100 dark:bg-gray-800 p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
-                              {JSON.stringify(recordToApiMapping(record), null, 2)}
-                            </pre>
                           </td>
                         </tr>
                       )}

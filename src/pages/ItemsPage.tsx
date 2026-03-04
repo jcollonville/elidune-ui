@@ -1,16 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, BookOpen, Filter, Search, Globe, Loader2, AlertCircle, CheckCircle, Video, Music, Image, FileText, Disc, Newspaper } from 'lucide-react';
-import { Card, Button, Table, Badge, Pagination, SearchInput, Modal, Input } from '@/components/common';
+import { Plus, BookOpen, Filter, Search, Globe, Loader2, AlertCircle, CheckCircle, Video, Music, Image, FileText, Disc, Newspaper, Trash2 } from 'lucide-react';
+import { Card, Button, Table, Badge, SearchInput, Modal, Input } from '@/components/common';
 import { useAuth } from '@/contexts/AuthContext';
 import { canManageItems, type MediaType, type MediaTypeOption } from '@/types';
 import api from '@/services/api';
-import type { ItemShort, Author, Z3950Server, ImportReport, DuplicateConfirmationRequired } from '@/types';
+import type { ItemShort, Author, Z3950Server, ImportReport, DuplicateConfirmationRequired, Source } from '@/types';
+import CallNumberField from '@/components/specimen/CallNumberField';
+import { buildSuggestedCallNumber, validateCallNumber } from '@/utils/callNumber';
 import { PUBLIC_TYPE_OPTIONS } from '@/utils/codeLabels';
 import type { AxiosError } from 'axios';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
-const ITEMS_PER_PAGE = 20;
+const PAGE_SIZE = 20;
 
 function getDuplicateConfirmationRequired(error: unknown): DuplicateConfirmationRequired | null {
   const ax = error as AxiosError<any>;
@@ -27,6 +30,8 @@ export default function ItemsPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
 
   const MEDIA_TYPES: MediaTypeOption[] = [
     { value: '', label: t('items.allTypes') },
@@ -47,54 +52,130 @@ export default function ItemsPage() {
     { value: 'm', label: t('items.mediaType.multimedia') },
   ];
 
-  const [items, setItems] = useState<ItemShort[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [totalItems, setTotalItems] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [mediaType, setMediaType] = useState<MediaType | ''>('');
-  const [publicType, setPublicType] = useState<string>('');
+  // Filters – init from URL so returning from item detail restores search
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('freesearch') ?? '');
+  const [mediaType, setMediaType] = useState<MediaType | ''>(
+    () => (searchParams.get('media_type') || '') as MediaType | ''
+  );
+  const [audienceType, setAudienceType] = useState<string>(() => searchParams.get('audience_type') ?? '');
   const [showFilters, setShowFilters] = useState(false);
-  const [advancedFilters, setAdvancedFilters] = useState({
-    title: '',
-    author: '',
-    isbn: '',
-  });
+  const [advancedFilters, setAdvancedFilters] = useState(() => ({
+    title: searchParams.get('title') ?? '',
+    author: searchParams.get('author') ?? '',
+    isbn: searchParams.get('isbn') ?? '',
+  }));
 
   // Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const fetchItems = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await api.getItems({
+  const {
+    data,
+    isLoading: isItemsLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: [
+      'items',
+      {
+        searchQuery,
+        mediaType,
+        audienceType,
+        advancedFilters,
+      },
+    ],
+    queryFn: async ({ pageParam }) => {
+      return api.getItems({
         freesearch: searchQuery || undefined,
         media_type: mediaType || undefined,
-        public_type: publicType ? parseInt(publicType, 10) : undefined,
+        audience_type: audienceType ? parseInt(audienceType, 10) : undefined,
         title: advancedFilters.title || undefined,
         author: advancedFilters.author || undefined,
         isbn: advancedFilters.isbn || undefined,
-        page: currentPage,
-        per_page: ITEMS_PER_PAGE,
+        page: pageParam,
+        per_page: PAGE_SIZE,
       });
-      setItems(response.items);
-      setTotalItems(response.total);
-    } catch (error) {
-      console.error('Error fetching items:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [searchQuery, mediaType, publicType, advancedFilters, currentPage]);
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage?.items?.length) return undefined;
+      const loaded = lastPage.page * lastPage.per_page;
+      return loaded < lastPage.total ? lastPage.page + 1 : undefined;
+    },
+  });
+
+  const items = data?.pages.flatMap((p) => p.items) ?? [];
+  const totalItems = data?.pages[0]?.total ?? 0;
+
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    const el = loadMoreRef.current;
+    const scrollRoot = el?.closest('.items-list-scroll') ?? null;
+    if (!el || !scrollRoot || !hasNextPage || isFetchingNextPage || !data?.pages?.length) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) fetchNextPage();
+      },
+      { root: scrollRoot, rootMargin: '200px', threshold: 0 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, data?.pages?.length]);
+
+  // Restore last search from sessionStorage when (re)entering the page
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('itemsPageState');
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        searchQuery?: string;
+        mediaType?: MediaType | '';
+        audienceType?: string;
+        advancedFilters?: { title?: string; author?: string; isbn?: string };
+      };
+      if (typeof saved.searchQuery === 'string') setSearchQuery(saved.searchQuery);
+      if (typeof saved.mediaType === 'string') setMediaType(saved.mediaType as MediaType | '');
+      if (typeof saved.audienceType === 'string') setAudienceType(saved.audienceType);
+      if (saved.advancedFilters && typeof saved.advancedFilters === 'object') {
+        setAdvancedFilters((prev) => ({
+          ...prev,
+          ...saved.advancedFilters,
+        }));
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+  }, []);
+
+  // Persist search state in URL + sessionStorage so it survives navigation
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (searchQuery) next.set('freesearch', searchQuery);
+    if (mediaType) next.set('media_type', mediaType);
+    if (audienceType) next.set('audience_type', audienceType);
+    if (advancedFilters.title) next.set('title', advancedFilters.title);
+    if (advancedFilters.author) next.set('author', advancedFilters.author);
+    if (advancedFilters.isbn) next.set('isbn', advancedFilters.isbn);
+    setSearchParams(next, { replace: true });
+
+    try {
+      sessionStorage.setItem(
+        'itemsPageState',
+        JSON.stringify({
+          searchQuery,
+          mediaType,
+          audienceType,
+          advancedFilters,
+        })
+      );
+    } catch {
+      // ignore quota / storage errors
+    }
+  }, [searchQuery, mediaType, audienceType, advancedFilters, setSearchParams]);
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
-    setCurrentPage(1);
   };
 
   const handleRowClick = (item: ItemShort) => {
@@ -204,8 +285,9 @@ export default function ItemsPage() {
       key: 'specimens',
       header: t('items.specimens'),
       render: (item: ItemShort) => {
-        const total = item.nb_specimens ?? 0;
-        const available = item.nb_available ?? 0;
+        const list = item.specimens ?? [];
+        const total = list.length;
+        const available = list.filter((s) => s.availability === 0).length;
         if (total === 0) return <span className="text-gray-500 dark:text-gray-400">-</span>;
         return (
           <span className="text-gray-600 dark:text-gray-300">
@@ -228,8 +310,6 @@ export default function ItemsPage() {
     },
   ];
 
-  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -251,19 +331,18 @@ export default function ItemsPage() {
       <Card>
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
-            <SearchInput
-              value={searchQuery}
-              onChange={handleSearch}
-              placeholder={t('items.searchPlaceholder')}
-            />
+            {!showFilters && (
+              <SearchInput
+                value={searchQuery}
+                onChange={handleSearch}
+                placeholder={t('items.searchPlaceholder')}
+              />
+            )}
           </div>
           <div className="flex gap-2">
             <select
               value={mediaType}
-              onChange={(e) => {
-                setMediaType(e.target.value as MediaType | '');
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setMediaType(e.target.value as MediaType | '')}
               className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
             >
               {MEDIA_TYPES.map((type) => (
@@ -273,11 +352,8 @@ export default function ItemsPage() {
               ))}
             </select>
             <select
-              value={publicType}
-              onChange={(e) => {
-                setPublicType(e.target.value);
-                setCurrentPage(1);
-              }}
+              value={audienceType}
+              onChange={(e) => setAudienceType(e.target.value)}
               className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
             >
               <option value="">{t('items.allPublicTypes')}</option>
@@ -292,7 +368,9 @@ export default function ItemsPage() {
               onClick={() => setShowFilters(!showFilters)}
               leftIcon={<Filter className="h-4 w-4" />}
             >
-              <span className="hidden sm:inline">{t('items.filters')}</span>
+              <span className="hidden sm:inline">
+                {showFilters ? t('common.hide') : t('items.advancedSearch')}
+              </span>
             </Button>
           </div>
         </div>
@@ -329,14 +407,11 @@ export default function ItemsPage() {
             <div className="flex justify-end gap-2 mt-4">
               <Button
                 variant="ghost"
-                onClick={() => {
-                  setAdvancedFilters({ title: '', author: '', isbn: '' });
-                  setCurrentPage(1);
-                }}
+                onClick={() => setAdvancedFilters({ title: '', author: '', isbn: '' })}
               >
                 {t('common.reset')}
               </Button>
-              <Button onClick={fetchItems} leftIcon={<Search className="h-4 w-4" />}>
+              <Button leftIcon={<Search className="h-4 w-4" />}>
                 {t('common.search')}
               </Button>
             </div>
@@ -344,25 +419,49 @@ export default function ItemsPage() {
         )}
       </Card>
 
-      {/* Items table */}
-      <Card padding="none">
-        <Table
-          columns={columns}
-          data={items}
-          keyExtractor={(item) => item.id}
-          onRowClick={handleRowClick}
-          isLoading={isLoading}
-          emptyMessage={t('items.noItems')}
-        />
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
+      {/* Items list: fixed-height scroll area so header/filters stay static */}
+      <Card padding="none" className="flex flex-col min-h-0">
+        <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 text-sm text-gray-600 dark:text-gray-300 flex justify-end">
+          <span>{t('items.count', { count: totalItems })}</span>
+        </div>
+        {/* Fixed table header (Titre / Auteur / ...) */}
+        <div className="overflow-x-auto border-b border-gray-200 dark:border-gray-800">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-800">
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ${column.className || ''}`}
+                  >
+                    {column.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <div
+          className="items-list-scroll overflow-auto max-h-[calc(100vh-18rem)]"
+          aria-label={t('items.title')}
+        >
+          <Table
+            columns={columns}
+            data={items}
+            keyExtractor={(item) => item.id}
+            onRowClick={handleRowClick}
+            isLoading={isItemsLoading}
+            emptyMessage={t('items.noItems')}
+            hideHeader
+          />
+          <div ref={loadMoreRef} className="h-4 flex-shrink-0" aria-hidden />
+          {isFetchingNextPage && (
+            <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500 dark:text-gray-400">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>{t('common.loading')}</span>
+            </div>
+          )}
+        </div>
       </Card>
 
       {/* Create modal */}
@@ -373,7 +472,9 @@ export default function ItemsPage() {
         size="lg"
       >
         <CreateItemForm
-          onCreated={() => fetchItems()}
+          onCreated={() => {
+            queryClient.invalidateQueries({ queryKey: ['items'] });
+          }}
           onClose={() => setShowCreateModal(false)}
         />
       </Modal>
@@ -411,6 +512,12 @@ function CreateItemForm({ onCreated, onClose }: CreateItemFormProps) {
   const [isSearchingZ3950, setIsSearchingZ3950] = useState(false);
   const [z3950Message, setZ3950Message] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Sources and specimens (optional when creating item)
+  const [sources, setSources] = useState<Source[]>([]);
+  const [specimens, setSpecimens] = useState<{ barcode: string; call_number: string; source_id: string }[]>([
+    { barcode: '', call_number: '', source_id: '' },
+  ]);
+
   const MEDIA_TYPES: MediaTypeOption[] = [
     { value: 'u', label: t('items.mediaType.unknown') },
     { value: 'b', label: t('items.mediaType.printedText') },
@@ -429,7 +536,7 @@ function CreateItemForm({ onCreated, onClose }: CreateItemFormProps) {
     { value: 'm', label: t('items.mediaType.multimedia') },
   ];
 
-  // Load Z39.50 servers on mount
+  // Load Z39.50 servers and sources on mount
   useEffect(() => {
     const fetchServers = async () => {
       try {
@@ -440,7 +547,22 @@ function CreateItemForm({ onCreated, onClose }: CreateItemFormProps) {
         console.error('Error fetching Z39.50 servers:', error);
       }
     };
+    const fetchSources = async () => {
+      try {
+        const list = await api.getSources(false);
+        setSources(list);
+        const defaultId = list.find((s) => s.default)?.id ?? list[0]?.id ?? '';
+        setSpecimens((prev) =>
+          prev.length === 1 && prev[0].source_id === '' && defaultId
+            ? [{ ...prev[0], source_id: defaultId }]
+            : prev
+        );
+      } catch (error) {
+        console.error('Error fetching sources:', error);
+      }
+    };
     fetchServers();
+    fetchSources();
   }, []);
 
   const handleZ3950Search = async () => {
@@ -486,11 +608,41 @@ function CreateItemForm({ onCreated, onClose }: CreateItemFormProps) {
     }
   };
 
+  const buildSpecimensPayload = (): { barcode?: string; call_number?: string; source_id: string }[] | undefined => {
+    const filled = specimens.filter((s) => s.source_id.trim() !== '');
+    if (filled.length === 0) return undefined;
+    return filled.map((s) => ({
+      barcode: s.barcode.trim() || undefined,
+      call_number: s.call_number.trim() || undefined,
+      source_id: s.source_id,
+    }));
+  };
+
+  const handleAddSpecimen = () => {
+    setSpecimens([...specimens, { barcode: '', call_number: '', source_id: sources.find((s) => s.default)?.id ?? sources[0]?.id ?? '' }]);
+  };
+
+  const handleRemoveSpecimen = (index: number) => {
+    if (specimens.length <= 1) return;
+    setSpecimens(specimens.filter((_, i) => i !== index));
+  };
+
+  const handleSpecimenChange = (index: number, field: 'barcode' | 'call_number' | 'source_id', value: string) => {
+    const next = [...specimens];
+    next[index] = { ...next[index], [field]: value };
+    setSpecimens(next);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const invalidCallNumber = specimens.find((s) => s.call_number.trim() !== '' && !validateCallNumber(s.call_number));
+    if (invalidCallNumber) return;
+    const specimenPayload = buildSpecimensPayload();
+    if (specimenPayload?.some((s) => !s.source_id)) return;
     setIsLoading(true);
     try {
-      const created = await api.createItem(formData);
+      const payload = { ...formData, ...(specimenPayload?.length ? { specimens: specimenPayload } : {}) };
+      const created = await api.createItem(payload);
       setCreatedItemId(created.item.id ?? null);
       setImportReport(created.import_report);
       onCreated();
@@ -509,10 +661,12 @@ function CreateItemForm({ onCreated, onClose }: CreateItemFormProps) {
 
   const handleConfirmReplaceExisting = async () => {
     if (!confirmReplaceModal) return;
+    const specimenPayload = buildSpecimensPayload();
     setConfirmReplaceLoading(true);
     setConfirmReplaceError(null);
     try {
-      const created = await api.createItem(formData, { confirmReplaceExistingId: confirmReplaceModal.existingId });
+      const payload = { ...formData, ...(specimenPayload?.length ? { specimens: specimenPayload } : {}) };
+      const created = await api.createItem(payload, { confirmReplaceExistingId: confirmReplaceModal.existingId });
       setConfirmReplaceModal(null);
       setCreatedItemId(created.item.id ?? null);
       setImportReport(created.import_report);
@@ -636,6 +790,70 @@ function CreateItemForm({ onCreated, onClose }: CreateItemFormProps) {
         onChange={(e) => setFormData({ ...formData, publication_date: e.target.value })}
         placeholder="YYYY"
       />
+
+      {/* Optional specimens: add one or more with source per specimen */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {t('items.specimensOptional')}
+          </label>
+          <Button type="button" variant="ghost" size="sm" onClick={handleAddSpecimen} leftIcon={<Plus className="h-4 w-4" />}>
+            {t('items.addSpecimen')}
+          </Button>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{t('items.specimensOptionalHint')}</p>
+        <div className="space-y-3">
+          {specimens.map((specimen, index) => (
+            <div key={index} className="flex items-start gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Input
+                  placeholder={t('items.specimenBarcode')}
+                  value={specimen.barcode}
+                  onChange={(e) => handleSpecimenChange(index, 'barcode', e.target.value)}
+                />
+                <CallNumberField
+                  value={specimen.call_number}
+                  onChange={(v) => handleSpecimenChange(index, 'call_number', v)}
+                  suggestedValue={buildSuggestedCallNumber({
+                    categoryCode: 'GEN',
+                    year: formData.publication_date,
+                  })}
+                  placeholder={t('items.callNumber')}
+                  inputId={`create-specimen-call-${index}`}
+                />
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('items.source')}</label>
+                  <select
+                    value={specimen.source_id}
+                    onChange={(e) => handleSpecimenChange(index, 'source_id', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm"
+                  >
+                    <option value="">{t('items.selectSource')}</option>
+                    {sources.map((src) => (
+                      <option key={src.id} value={src.id}>
+                        {src.name || src.id}
+                        {src.default ? ` (${t('importMarc.default')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {specimens.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRemoveSpecimen(index)}
+                  className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 shrink-0"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex justify-end gap-2 pt-4">
         <Button type="submit" isLoading={isLoading}>
           {t('common.create')}
